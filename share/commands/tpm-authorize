@@ -28,5 +28,5 @@ function cmd_tpm_authorize {
     fi
 
     tpm_set_authorized_policy_paths "$FDE_AUTHORIZED_POLICY"
-    bootloader_authorize_pcr_policy "$FDE_AP_SECRET_KEY" 
+    bootloader_authorize_pcr_policy "$FDE_AP_SECRET_KEY" "$FDE_AP_SEALED_SECRET"
 }

@@ -74,11 +74,6 @@ function grub_get_fde_password {
 function grub_update_early_config {
 
     sealed_key_file="$1"
-    sealed_pcr_bank="$2"
-    sealed_pcr_list="$3"
-    auth_policy_file="$4"
-    public_key_file="$5"
-    signature_file="$6"
 
     grub_set_control GRUB_ENABLE_CRYPTODISK "y"
     grub_set_control GRUB_TPM2_SEALED_KEY "$sealed_key_file"
@@ -86,16 +81,6 @@ function grub_update_early_config {
     # Do not clear the password implicitly; require fdectl or
     # jeos firstboot to do so explicitly.
     # grub_set_control GRUB_CRYPTODISK_PASSWORD ""
-
-    if [ -n "$sealed_key_file" ]; then
-	grub_set_control GRUB_TPM2_PCR_BANK "$sealed_pcr_bank"
-	grub_set_control GRUB_TPM2_PCR_LIST "$sealed_pcr_list"
-    fi
-
-    # These are empty when using a PCR policy directly
-    grub_set_control GRUB_TPM_AUTHORIZED_POLICY "$auth_policy_file"
-    grub_set_control GRUB_TPM_PUBLIC_KEY "$public_key_file"
-    grub_set_control GRUB_TPM_SIGNATURE "$signature_file"
 
     # Note that we *must* recreate grub.cfg here so that the
     # subsequent prediction by pcr-oracle is based on the grub.cfg
@@ -115,28 +100,14 @@ function grub_commit_config {
 
 function grub_enable_fde_authorized_policy {
 
-    sealed_key_file="$1"
-    auth_policy_file="$2"
-    public_key_file="$3"
-
-    grub_efi_dir=$(uefi_get_current_efidir)
-    if [ -z "$grub_efi_dir" ]; then
-	return 1
-    fi
-
-    # Copy the files to the ESP
-    cp "$sealed_key_file" "$grub_efi_dir/sealed.key"
-    cp "$auth_policy_file" "$grub_efi_dir/authpolicy.tpm"
-    cp "$public_key_file" "$grub_efi_dir/pubkey.tpm"
-
     # Set up grub.cfg
-    grub_update_early_config sealed.key "$FDE_SEAL_PCR_BANK" "$FDE_SEAL_PCR_LIST" \
-			authpolicy.tpm pubkey.tpm signature.tpm
+    grub_update_early_config sealed.tpm
 }
 
 function grub_authorize_pcr_policy {
 
     private_key_file="$1"
+    sealed_key_file="$2"
 
     grub_efi_dir=$(uefi_get_current_efidir)
     if [ -z "$grub_efi_dir" ]; then
@@ -145,14 +116,11 @@ function grub_authorize_pcr_policy {
 
     # Right now, we support only a single authorization. Down the road,
     # we should probably create sub-directories (using a hash of the
-    # PCR policy as name) and store the signature inside that subdir.
-    # Along with a record of which grub/shim version this applies to,
-    # so that we can purge them later on.
+    # PCR policy as name), store the signature inside that subdir, and
+    # append the valid signatures into the key file.
 
-    # The base name of the signed policy file must match what we
-    # we configured in our call to grub_update_early_config above.
-    signed_policy_file="$grub_efi_dir/signature.tpm"
-    tpm_authorize "$private_key_file" "$signed_policy_file"
+    tpm_authorize "$private_key_file" "$sealed_key_file" \
+		  "$grub_efi_dir/sealed.tpm"
 }
 
 function grub_enable_fde_pcr_policy {
@@ -165,10 +133,10 @@ function grub_enable_fde_pcr_policy {
     fi
 
     # First update grub.cfg...
-    grub_update_early_config sealed.key "$FDE_SEAL_PCR_BANK" "$FDE_SEAL_PCR_LIST"
+    grub_update_early_config sealed.tpm
 
     # ... then seal the key against a PCR9 value that covers grub.cfg
-    tpm_seal_secret "${luks_keyfile}" "$grub_efi_dir/sealed.key"
+    tpm_seal_secret "${luks_keyfile}" "$grub_efi_dir/sealed.tpm"
 }
 
 function grub_enable_fde_without_tpm {

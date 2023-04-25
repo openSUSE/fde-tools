@@ -91,6 +91,7 @@ function systemd_enable_fde_authorized_policy {
 function systemd_authorize_pcr_policy {
 
     private_key_file="$1"
+    sealed_key_file="$2"
 
     not_implemented
 }

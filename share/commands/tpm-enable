@@ -46,7 +46,7 @@ function cmd_tpm_enable {
 	    # ... and authorize the current system configuration.
 	    # This is what "fdectl tpm-authorize" does, inlined.
 	    tpm_set_authorized_policy_paths "$FDE_AUTHORIZED_POLICY"
-	    bootloader_authorize_pcr_policy "$FDE_AP_SECRET_KEY" 
+	    bootloader_authorize_pcr_policy "$FDE_AP_SECRET_KEY" "$FDE_AP_SEALED_SECRET"
 	    st=$?
 	fi
     elif [ -n "$opt_keyfile" ]; then

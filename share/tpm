@@ -49,6 +49,7 @@ function tpm_seal_key {
 
     echo "Sealing secret against PCR policy covering $FDE_SEAL_PCR_LIST" >&2
     pcr-oracle --input "$secret" --output "$sealed_secret" \
+			--key-format tpm2.0 \
 			--algorithm "$FDE_SEAL_PCR_BANK" \
 			--from eventlog \
 			--stop-event "$FDE_STOP_EVENT" \
@@ -108,6 +109,7 @@ function tpm_seal_secret {
     # against that, using pcr-oracle rather than the tpm2 tools
     if [ -n "$authorized_policy" ]; then
 	pcr-oracle --authorized-policy "$authorized_policy" \
+			--key-format tpm2.0 \
 			--input $secret \
 			--output $sealed_secret \
 			seal-secret
@@ -182,14 +184,17 @@ function tpm_create_authorized_policy {
 function tpm_authorize {
 
     private_key_file="$1"
-    signed_policy_file="$2"
+    sealed_key_file="$2"
+    signed_key_file="$3"
 
     pcr-oracle \
+		--key-format tpm2.0 \
 		--algorithm "$FDE_SEAL_PCR_BANK" \
                 --private-key "$private_key_file" \
                 --from eventlog \
 		--stop-event "$FDE_STOP_EVENT" \
 		--before \
-                --output "$signed_policy_file" \
+		--input "$sealed_key_file" \
+                --output "$signed_key_file" \
                 sign "$FDE_SEAL_PCR_LIST"
 }
