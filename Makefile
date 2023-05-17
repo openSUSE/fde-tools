@@ -1,7 +1,7 @@
 PKGNAME		= fde-tools-$(shell ./fde.sh --version)
 
 CCOPT		= -O0 -g
-SBINDIR		= /sbin
+SBINDIR		= /usr/sbin
 SYSCONFIGDIR	= /etc/sysconfig
 FDE_CONFIG_DIR	= /etc/fde
 FDE_SHARE_DIR	= /usr/share/fde
@@ -34,8 +34,8 @@ SUBDIRS := man bash-completion
 all:: $(TOOLS) $(SUBDIRS)
 
 install:: $(TOOLS)
-	install -d $(DESTDIR)/bin
-	install -m 755 $(TOOLS) $(DESTDIR)/bin
+	install -d $(DESTDIR)/usr/bin
+	install -m 755 $(TOOLS) $(DESTDIR)/usr/bin
 
 install::
 	@mkdir -p $(DESTDIR)$(FIRSTBOOTDIR)/modules
