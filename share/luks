@@ -233,6 +233,23 @@ function luks_drop_key {
 }
 
 ##################################################################
+# Test an existing password
+##################################################################
+function luks_test_password {
+
+    local luks_dev=$1
+    local luks_keyfile="$2"
+
+    display_infobox "Testing LUKS recovery password"
+    if ! cryptsetup open --test-passphrase --key-file "${luks_keyfile}" "${luks_dev}"; then
+	fde_trace "Unable to open the device with the password"
+	return 1
+    fi
+
+    return 0
+}
+
+##################################################################
 # Change an existing password
 # This function uses request_new_password to prompt the user for
 # the new password.

@@ -22,6 +22,7 @@ LIBSCRIPTS	= grub2 \
 		  commands/add-secondary-password \
 		  commands/remove-secondary-password \
 		  commands/tpm-enable \
+		  commands/tpm-disable \
 		  commands/tpm-authorize \
 		  commands/tpm-present
 
