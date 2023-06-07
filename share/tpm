@@ -21,7 +21,7 @@ FDE_DEFAULT_AUTHORIZED_POLICY="authorized-policy"
 
 # FIXME: this needs work for boot loaders other than grub
 # Maybe we should introduce a bootloader_stop_event() function.
-FDE_STOP_EVENT="grub-command=cryptomount"
+FDE_STOP_EVENT="grub-file=grub.cfg"
 
 ##################################################################
 # Check whether a TPM is present and working reasonably well
@@ -53,7 +53,7 @@ function tpm_seal_key {
 			--algorithm "$FDE_SEAL_PCR_BANK" \
 			--from eventlog \
 			--stop-event "$FDE_STOP_EVENT" \
-			--before \
+			--after \
 			seal-secret \
 			"$FDE_SEAL_PCR_LIST"
 }
@@ -193,7 +193,7 @@ function tpm_authorize {
                 --private-key "$private_key_file" \
                 --from eventlog \
 		--stop-event "$FDE_STOP_EVENT" \
-		--before \
+		--after \
 		--input "$sealed_key_file" \
                 --output "$signed_key_file" \
                 sign "$FDE_SEAL_PCR_LIST"
