@@ -2,9 +2,7 @@
 
 # Configure whether to use old-style PCR policies, or TPMv2 authorized policies.
 # Set to yes/no
-# For the time being, grub2 does not have full support for these policies, so
-# we leave it set to no.
-FDE_USE_AUTHORIZED_POLICIES=no
+FDE_USE_AUTHORIZED_POLICIES=yes
 
 # List of PCRs to seal the LUKS key to
 FDE_SEAL_PCR_LIST=0,2,4,7,9
