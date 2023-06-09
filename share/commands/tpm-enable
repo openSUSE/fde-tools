@@ -61,11 +61,6 @@ function cmd_tpm_enable {
 
 	rm -vf "$FDE_ENROLL_NEW_KEY"
 	fde_set_variable FDE_ENROLL_NEW_KEY ""
-    elif [ -n "$opt_create_new_key" ]; then
-	# We're being asked to create a secondary key and enroll it in one
-	# go. This is rarely useful
-	tpm_enable_pcr_policy "$luks_dev"
-	st=$?
     else
 	# We are just checkin' whether anything needs to be done.
 	# This is usually called from the fde activation service (by
@@ -86,26 +81,6 @@ function cmd_tpm_enable {
     fi
 
     return $st
-}
-
-function init_authorized_policy {
-
-    policy_name="$FDE_AUTHORIZED_POLICY"
-    if [ -z "$policy_name" ]; then
-	policy_name="$FDE_DEFAULT_AUTHORIZED_POLICY"
-    fi
-
-    ##################################################################
-    # Create the policy. If the private key does not exist yet,
-    # pcr-oracle will generate a suitable key.
-    # We also store a copy of the public key in a TPMv2 format so that
-    # boot loaders do need a full PEM/ASN.1 for that.
-    tpm_set_authorized_policy_paths "$policy_name"
-    tpm_create_authorized_policy $FDE_AP_SECRET_KEY $FDE_AP_AUTHPOLICY $FDE_AP_PUBLIC_KEY
-
-    if [ "$FDE_AUTHORIZED_POLICY" != "$policy_name" ]; then
-	fde_set_variable FDE_AUTHORIZED_POLICY "$policy_name"
-    fi
 }
 
 function tpm_enable_authorized_policy {
