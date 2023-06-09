@@ -24,3 +24,7 @@ FDE_TRACING=true
 # This is used by the installer to inform "fdectl tpm-enable" about a key
 # to enroll on the next reboot
 FDE_ENROLL_NEW_KEY=""
+
+# Enable/disable TPM key unsealing
+# Set to yes/no
+FDE_TPM_ENABLE=yes

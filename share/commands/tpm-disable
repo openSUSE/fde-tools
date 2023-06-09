@@ -46,6 +46,8 @@ function cmd_tpm_disable {
 	return 1
     fi
 
+    fde_set_variable FDE_TPM_ENABLE "no"
+
     # Update the bootloader settings without TPM
     bootloader_enable_fde_without_tpm
     return $?

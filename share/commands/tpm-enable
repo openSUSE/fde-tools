@@ -22,7 +22,7 @@
 alias cmd_requires_luks_device=true
 alias cmd_perform=cmd_tpm_enable
 
-function cmd_tpm_enable {
+function tpm_enable {
 
     luks_dev="$1"
 
@@ -163,4 +163,16 @@ function tpm_enable_pcr_policy {
     fi
 
     rm -f "$luks_new_keyfile"
+}
+
+function cmd_tpm_enable {
+    if [[ ! "$FDE_TPM_ENABLE" =~ y.* ]]; then
+        fde_set_variable FDE_TPM_ENABLE "yes"
+    fi
+
+    if ! tpm_enable "$1"; then
+	return 1
+    fi
+
+    return 0
 }
