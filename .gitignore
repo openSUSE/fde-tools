@@ -2,6 +2,8 @@
 *.swp
 pcr-oracle
 fde-token
+fdectl-grub-tpm2
 *.bz2
 kiwi*.log
 LOG
+*.so
