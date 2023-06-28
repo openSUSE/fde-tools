@@ -35,6 +35,7 @@
 #define OPT_DEBUG	1
 #define OPT_DEBUG_JSON	2
 #define OPT_KEY_SLOT	3
+#define OPT_KEY_ONLY	4
 
 static int
 check_existing_tokens(struct crypt_device *cd, int keyslot, int *token_id)
@@ -255,14 +256,61 @@ out:
 }
 
 static int
-list_tokens(struct crypt_device *cd)
+print_all_tokens(json_object *jobj_output)
+{
+	const char *string_out;
+
+	string_out = json_object_to_json_string_ext(jobj_output, JSON_C_TO_STRING_PRETTY);
+	if (!string_out)
+		return -EINVAL;
+	printf ("%s\n", string_out);
+
+	return 0;
+}
+
+static int
+print_token_keyslots(struct crypt_device *cd, json_object *jobj_output)
+{
+	json_object *jobj_keyslots;
+	json_object *jobj_keyslot;
+	struct array_list *keyslots;
+	const char *keyslot_str;
+	int i;
+
+	json_object_object_foreach(jobj_output, slot, val) {
+		if (!json_object_object_get_ex(val, "keyslots", &jobj_keyslots)) {
+			l_err(cd, _("Failed to get keyslots for token %s."), slot);
+			continue;
+		}
+
+		if (json_object_array_length(jobj_keyslots) == 0)
+			continue;
+
+		keyslots = json_object_get_array(jobj_keyslots);
+		if (keyslots == NULL) {
+			l_err(cd, _("Failed to get the keyslots array for token %s."), slot);
+			continue;
+		}
+
+		for (i = 0; i < array_list_length(keyslots); i++) {
+			jobj_keyslot = array_list_get_idx(keyslots, i);
+			keyslot_str = json_object_get_string(jobj_keyslot);
+			printf("%s ", keyslot_str);
+		}
+	}
+	printf("\n");
+
+	return 0;
+}
+
+static int
+list_tokens(struct crypt_device *cd, int key_only)
 {
 	const char *json;
 	json_object *jobj;
 	json_object *jobj_tokens;
 	json_object *jobj_type;
 	json_object *jobj_output = NULL;
-	const char *string_out;
 	int r;
 
 	if (!cd)
@@ -309,17 +357,17 @@ list_tokens(struct crypt_device *cd)
 		json_object_object_add(jobj_output, slot, json_object_get(val));
 	}
 
-	if (json_object_object_length(jobj_output) != 0) {
-		string_out = json_object_to_json_string_ext(jobj_output, JSON_C_TO_STRING_PRETTY);
-		if (!string_out) {
-			r = -EINVAL;
-			goto out;
-		}
-
-		printf ("%s\n", string_out);
+	/* Nothing to print */
+	if (json_object_object_length(jobj_output) == 0) {
+		r = 0;
+		goto out;
 	}
 
-	r = 0;
+	if (key_only == 0)
+		r = print_all_tokens(jobj_output);
+	else
+		r = print_token_keyslots(cd, jobj_output);
+
 out:
 	json_object_put(jobj);
 	if (jobj_output)
@@ -358,6 +406,8 @@ static char args_doc[] = N_("<action> <device>");
 static struct argp_option options[] = {
 	{0,		0,		0,	  0, N_("Options for the 'add' action:")},
 	{"key-slot",	OPT_KEY_SLOT,	"NUM",	  0, N_("Keyslot to assign the token to.")},
+	{0,		0,		0,	  0, N_("Options for the 'list' action:")},
+	{"key-only",	OPT_KEY_ONLY,	0,	  0, N_("List the keyslots assigned to grub-tpm2 tokens.")},
 	{0,		0,		0,	  0, N_("Generic options:")},
 	{"verbose",	'v',		0,	  0, N_("Shows more detailed error messages")},
 	{"debug",	OPT_DEBUG,	0,	  0, N_("Show debug messages")},
@@ -369,6 +419,7 @@ struct arguments {
 	char *device;
 	char *action;
 	int keyslot;
+	int keyonly;
 	int verbose;
 	int debug;
 	int debug_json;
@@ -381,6 +432,9 @@ parse_opt (int key, char *arg, struct argp_state *state) {
 	switch (key) {
 	case OPT_KEY_SLOT:
 		arguments->keyslot = atoi(arg);
+		break;
+	case OPT_KEY_ONLY:
+		arguments->keyonly = 1;
 		break;
 	case 'v':
 		arguments->verbose = 1;
@@ -512,8 +566,7 @@ int main(int argc, char *argv[])
 		if (ret < 0)
 			return EXIT_FAILURE;
 
-		ret = list_tokens(cd);
-
+		ret = list_tokens(cd, arguments.keyonly);
 	} else {
 		printf(_("Unsupported action.\n"));
 		ret = EXIT_FAILURE;
