@@ -318,14 +318,24 @@ function luks_add_random_key {
     local luks_dev="$1"
     local luks_keyfile="$2"
     local new_keyfile="$3"
+    local luks_output
+    local luks_keyslot
 
     dd if=/dev/random bs=1 count=$FDE_KEY_SIZE_BYTES of=$new_keyfile status=none
 
     # Note: we try to reduce the cost of PBKDF to (almost) nothing.
     # There's no need in slowing down this operation for a
     # key that was random to begin with.
-    cryptsetup --key-file "${luks_keyfile}" luksAddKey --pbkdf "$FDE_LUKS_PBKDF" \
-		--pbkdf-force-iterations 1000 $luks_dev $new_keyfile
+    luks_output=$(cryptsetup --verbose --key-file "${luks_keyfile}" luksAddKey \
+		  --pbkdf "$FDE_LUKS_PBKDF" --pbkdf-force-iterations 1000 \
+		  ${luks_dev} ${new_keyfile})
+    if test $? -ne 0; then
+	fde_trace "Warning: luksAddKey indicates failure"
+        return 1
+    fi
+
+    luks_keyslot=$(sed -En 's/Key slot ([0-9]*) created./\1/p' <<< "${luks_output}")
+    fdectl-grub-tpm2 add --key-slot ${luks_keyslot} ${luks_dev}
 }
 
 function luks_set_random_key {
