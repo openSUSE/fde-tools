@@ -1,0 +1,59 @@
+#
+#   Copyright (C) 2023 SUSE LLC
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#
+#   Written by Gary Lin <glin@suse.com>
+
+alias cmd_requires_luks_device=true
+alias cmd_perform=cmd_tpm_wipe
+
+function cmd_tpm_wipe {
+    partition_dev="$1"
+
+    # Request the user to type the recovery password to prove the password is
+    # correctly memorized, so that the user won't lock herself/himself out of
+    # the system after reboot.
+    if [ -n "$opt_keyfile" -a -f "$opt_keyfile" ]; then
+	luks_test_password "$partition_dev" "$opt_keyfile"
+	status=$?
+    else
+	if ! fde_request_recovery_password; then
+	    display_errorbox "Unable to obtain recovery password; aborting."
+	    return 1
+	fi
+	luks_keyfile=$(luks_write_password pass "${result_password}")
+	luks_test_password "$partition_dev" "$luks_keyfile"
+	status=$?
+	rm -f "$luks_keyfile"
+    fi
+
+    if [ "$status" -ne 0 ]; then
+	display_errorbox "Failed to test password on LUKS partition"
+	return 1
+    fi
+
+    bootloader_wipe_key "${partition_dev}"
+    if [ "$?" -ne 0 ]; then
+        display_errorbox "Failed to wipe out key slots"
+        return  1
+    fi
+
+    fde_set_variable FDE_TPM_ENABLE "no"
+
+    # Update the bootloader settings without TPM
+    bootloader_enable_fde_without_tpm
+    return $?
+}

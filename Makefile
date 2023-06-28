@@ -30,7 +30,8 @@ LIBSCRIPTS	= grub2 \
 		  commands/tpm-enable \
 		  commands/tpm-disable \
 		  commands/tpm-authorize \
-		  commands/tpm-present
+		  commands/tpm-present \
+		  commands/tpm-wipe
 
 _LIBSCRIPTS	= $(addprefix share/,$(LIBSCRIPTS))
 

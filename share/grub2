@@ -28,6 +28,7 @@ alias bootloader_authorize_pcr_policy=grub_authorize_pcr_policy
 alias bootloader_set_fde_password=grub_set_fde_password
 alias bootloader_get_fde_password=grub_get_fde_password
 alias bootloader_commit_config=grub_commit_config
+alias bootloader_wipe_key=grub_wipe_key
 
 ##################################################################
 # Edit a variable in /etc/default/grub
@@ -149,4 +150,36 @@ function grub_enable_fde_without_tpm {
     # Update grub.cfg inside the EFI partition without enabling the TPM
     # key protector.
     grub_update_early_config
+}
+
+function grub_wipe_key {
+    local luks_dev=$1
+    local keyslots
+
+    keyslots=$(fdectl-grub-tpm2 list --key-only ${luks_dev})
+    if [ "$?" -ne 0 ]; then
+        return 1
+    elif [ -z "${keyslots}" ]; then
+        return 0
+    fi
+
+    # TODO Avoid removing the last keyslot
+
+    # Remove the keyslots assigned to grub-tpm2 tokens
+    for slot in "${keyslots}"; do
+        cryptsetup luksKillSlot -q ${luks_dev} ${slot}
+    done
+
+    fdectl-grub-tpm2 clean ${luks_dev}
+
+    # Remove the sealed key file in the EFI system partition
+    grub_efi_dir=$(uefi_get_current_efidir)
+    if [ -z "$grub_efi_dir" ]; then
+	return 1
+    fi
+    grub_sealed_key="$grub_efi_dir/sealed.tpm"
+
+    if [ -f ${grub_sealed_key} ]; then
+        rm -f "$grub_efi_dir/sealed.tpm"
+    fi
 }

@@ -70,6 +70,7 @@ Commands:
   tpm-present	check whether a TPM2 chip is present and working
   tpm-enable	enable TPM protection
   tpm-disable	disable TPM protection
+  tpm-wipe      wipe out the keyslot for the sealed key
 EOF
 }
 
