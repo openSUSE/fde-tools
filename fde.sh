@@ -67,6 +67,7 @@ Commands:
   passwd	change the password protecting the partition
   add-secondary-password	protect partition with a passphrase and use that to unlock on next boot
   remove-secondary-password	remove passphrase installed by add-secondary-password
+  regenerate-key		regenerate the random key to replace the old key and seal the new key
   tpm-present	check whether a TPM2 chip is present and working
   tpm-enable	enable TPM protection
   tpm-disable	disable TPM protection
