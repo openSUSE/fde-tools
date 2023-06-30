@@ -43,8 +43,8 @@ SUBDIRS := man bash-completion
 all:: $(TOOLS) $(SUBDIRS) $(TOKEN_PLUGINS)
 
 install:: $(TOOLS)
-	install -d $(DESTDIR)/usr/bin
-	install -m 755 $(TOOLS) $(DESTDIR)/usr/bin
+	install -d $(DESTDIR)/usr/sbin
+	install -m 755 $(TOOLS) $(DESTDIR)/usr/sbin
 
 install:: $(TOKEN_PLUGINS)
 	install -d $(DESTDIR)/$(LIBDIR)/cryptsetup
