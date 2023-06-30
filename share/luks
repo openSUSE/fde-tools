@@ -233,14 +233,14 @@ function luks_drop_key {
 }
 
 ##################################################################
-# Test an existing password
+# Verify an existing password
 ##################################################################
-function luks_test_password {
+function luks_verify_password {
 
     local luks_dev=$1
     local luks_keyfile="$2"
 
-    display_infobox "Testing LUKS recovery password"
+    display_infobox "Verifying LUKS recovery password"
     if ! cryptsetup open --test-passphrase --key-file "${luks_keyfile}" "${luks_dev}"; then
 	fde_trace "Unable to open the device with the password"
 	return 1
