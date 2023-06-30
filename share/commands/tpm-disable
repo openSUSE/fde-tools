@@ -22,13 +22,13 @@ alias cmd_perform=cmd_tpm_disable
 
 function cmd_tpm_disable {
 
-    partition_dev="$1"
+    luks_dev="$1"
 
     # Request the user to type the recovery password to prove the password is
     # correctly memorized, so that the user won't lock herself/himself out of
     # the system after reboot.
     if [ -n "$opt_keyfile" -a -f "$opt_keyfile" ]; then
-	luks_verify_password "$partition_dev" "$opt_keyfile"
+	luks_verify_password "$luks_dev" "$opt_keyfile"
 	status=$?
     else
 	if ! fde_request_recovery_password; then
@@ -36,7 +36,7 @@ function cmd_tpm_disable {
 	    return 1
 	fi
 	luks_keyfile=$(luks_write_password pass "${result_password}")
-	luks_verify_password "$partition_dev" "$luks_keyfile"
+	luks_verify_password "$luks_dev" "$luks_keyfile"
 	status=$?
 	rm -f "$luks_keyfile"
     fi
