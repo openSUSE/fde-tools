@@ -17,43 +17,24 @@
 #
 #   Written by Gary Lin <glin@suse.com>
 
+. $SHAREDIR/commands/tpm-disable
+
 alias cmd_requires_luks_device=true
 alias cmd_perform=cmd_tpm_wipe
 
 function cmd_tpm_wipe {
+
     luks_dev="$1"
 
-    # Request the user to type the recovery password to prove the password is
-    # correctly memorized, so that the user won't lock herself/himself out of
-    # the system after reboot.
-    if [ -n "$opt_keyfile" -a -f "$opt_keyfile" ]; then
-	luks_verify_password "$luks_dev" "$opt_keyfile"
-	status=$?
-    else
-	if ! fde_request_recovery_password; then
-	    display_errorbox "Unable to obtain recovery password; aborting."
-	    return 1
-	fi
-	luks_keyfile=$(luks_write_password pass "${result_password}")
-	luks_verify_password "$luks_dev" "$luks_keyfile"
-	status=$?
-	rm -f "$luks_keyfile"
-    fi
-
-    if [ "$status" -ne 0 ]; then
-	display_errorbox "Failed to verify password on LUKS partition"
+    if ! tpm_disable "${luks_dev}"; then
 	return 1
     fi
 
     bootloader_wipe_key "${luks_dev}"
     if [ "$?" -ne 0 ]; then
         display_errorbox "Failed to wipe out key slots"
-        return  1
+        return 1
     fi
 
-    fde_set_variable FDE_TPM_ENABLE "no"
-
-    # Update the bootloader settings without TPM
-    bootloader_enable_fde_without_tpm
-    return $?
+    return 0
 }
