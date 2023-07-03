@@ -59,17 +59,17 @@ function cmd_regenerate_key {
 	fde_set_variable FDE_ENROLL_NEW_KEY "$opt_keyfile"
     fi
 
+    # Finish TPM key sealing
+    tpm_enable ${luks_dev}
+
     # Remove the previous keyslot
     if [ -n "${KEYSLOTS_TO_BE_WIPED}" ]; then
-        bootloader_wipe_key "${luks_dev}" "${KEYSLOTS_TO_BE_WIPED}"
+        bootloader_remove_keyslots "${luks_dev}" "${KEYSLOTS_TO_BE_WIPED}"
         if [ "$?" -ne 0 ]; then
             display_errorbox "Failed to wipe out key slots: ${KEYSLOTS_TO_BE_WIPED}"
             return  1
         fi
     fi
-
-    # Call tpm_enable to finish TPM key sealing
-    tpm_enable ${luks_dev}
 
     return 0
 }

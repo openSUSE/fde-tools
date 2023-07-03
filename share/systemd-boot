@@ -30,7 +30,9 @@ alias bootloader_enable_fde_authorized_policy=systemd_enable_fde_authorized_poli
 alias bootloader_authorize_pcr_policy=systemd_authorize_pcr_policy
 alias bootloader_set_fde_password=systemd_set_fde_password
 alias bootloader_get_fde_password=systemd_get_fde_password
-alias bootloader_wipe_key=systemd_wipe_key
+alias bootloader_get_keyslots=systemd_get_keyslots
+alias bootloader_remove_keyslots=systemd_remove_keyslots
+alias bootloader_wipe=systemd_wipe
 
 
 function not_implemented {
@@ -120,10 +122,28 @@ function systemd_enable_fde_without_tpm {
 }
 
 ##################################################################
+# This function implements the boot loader specific part to get
+# the keyslot IDs used by systemd-boot..
+##################################################################
+function systemd_get_keyslots {
+
+    not_implemented
+}
+
+##################################################################
+# This function implements the boot loader specific part to remove
+# the keyslots used by systemd-boot..
+##################################################################
+function systemd_remove_keyslots {
+
+    not_implemented
+}
+
+##################################################################
 # This function implements the boot loader specific part of
 # tpm-wipe.
 ##################################################################
-function systemd_wipe_key {
+function systemd_wipe {
 
     not_implemented
 }
