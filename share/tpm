@@ -94,7 +94,6 @@ function tpm_test {
 	result=0
     fi
 
-    fde_clean_tempdir
     return $result
 }
 
