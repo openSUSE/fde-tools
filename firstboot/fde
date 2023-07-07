@@ -38,6 +38,27 @@ fi
 ##################################################################
 KIWI_ROOT_KEYFILE=/root/.root.keyfile
 
+##################################################################
+# Aliases are not expanded in non-interactive mode.
+# Set the bootloader specific functions here as aliases
+##################################################################
+
+function bootloader_enable_fde_pcr_policy {
+    grub_enable_fde_pcr_policy "$@"
+}
+
+function bootloader_enable_fde_without_tpm {
+    grub_enable_fde_without_tpm "$@"
+}
+
+function bootloader_get_fde_password {
+    grub_get_fde_password "$@"
+}
+
+##################################################################
+# FDE Firstboot functions
+##################################################################
+
 function fde_protect_tpm {
 
     local luks_dev=$1
