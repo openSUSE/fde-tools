@@ -120,5 +120,13 @@ function add_secondary_key {
 	return 1
     fi
 
+    # Add the new random key to the devices in FDE_EXTRA_DEVS
+    for extra_dev in ${FDE_EXTRA_DEVS}; do
+        if ! luks_add_key "$extra_dev" "$luks_keyfile" "$luks_new_keyfile"; then
+            rm -f "$luks_keyfile"
+            return 1
+        fi
+    done
+
     rm -f "$luks_keyfile"
 }

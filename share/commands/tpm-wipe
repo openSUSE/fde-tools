@@ -30,11 +30,17 @@ function cmd_tpm_wipe {
 	return 1
     fi
 
-    bootloader_wipe "${luks_dev}"
-    if [ "$?" -ne 0 ]; then
+    if ! bootloader_wipe "${luks_dev}"; then
         display_errorbox "Failed to wipe out key slots"
         return 1
     fi
+
+    for extra_dev in ${FDE_EXTRA_DEVS}; do
+        if ! bootloader_wipe "$extra_dev"; then
+            display_errorbox "Failed to wipe out key slots (${extra_dev})"
+            return 1
+        fi
+    done
 
     return 0
 }

@@ -313,7 +313,7 @@ function luks_add_password {
     rm -f ${new_keyfile}
 }
 
-function luks_add_random_key {
+function luks_add_key {
 
     local luks_dev="$1"
     local luks_keyfile="$2"
@@ -321,7 +321,10 @@ function luks_add_random_key {
     local luks_output
     local luks_keyslot
 
-    dd if=/dev/random bs=1 count=$FDE_KEY_SIZE_BYTES of=$new_keyfile status=none
+    if [ -z "$new_keyfile" ]; then
+        echo "Unable to obtain new key" >&2
+        return 1
+    fi
 
     # Note: we try to reduce the cost of PBKDF to (almost) nothing.
     # There's no need in slowing down this operation for a
@@ -336,6 +339,18 @@ function luks_add_random_key {
 
     luks_keyslot=$(sed -En 's/Key slot ([0-9]*) created./\1/p' <<< "${luks_output}")
     fdectl-grub-tpm2 add --key-slot ${luks_keyslot} ${luks_dev}
+}
+
+
+function luks_add_random_key {
+
+    local luks_dev="$1"
+    local luks_keyfile="$2"
+    local new_keyfile="$3"
+
+    dd if=/dev/random bs=1 count=$FDE_KEY_SIZE_BYTES of=$new_keyfile status=none
+
+    luks_add_key ${luks_dev} ${luks_keyfile} ${new_keyfile}
 }
 
 function luks_set_random_key {

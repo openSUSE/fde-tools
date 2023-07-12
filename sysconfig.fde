@@ -28,3 +28,8 @@ FDE_ENROLL_NEW_KEY=""
 # Enable/disable TPM key unsealing
 # Set to yes/no
 FDE_TPM_ENABLE=yes
+
+# Specify the devices to be managed by fdectl other than the root partition
+# NOTE: Those devices must use the same recovery password as the one of the
+# root partition.
+FDE_EXTRA_DEVS=""

@@ -25,9 +25,15 @@ alias cmd_perform=cmd_regenerate_key
 
 function cmd_regenerate_key {
     luks_dev="$1"
+    declare -A EXTRA_KEYSLOTS_OLD
 
     # Get the current keyslots for the TPM sealed key
-    KEYSLOTS_TO_BE_WIPED=$(bootloader_get_keyslots ${luks_dev})
+    KEYSLOTS_OLD=$(bootloader_get_keyslots ${luks_dev})
+
+    # Get the current keyslots in the extra devices
+    for extra_dev in ${FDE_EXTRA_DEVS}; do
+        EXTRA_KEYSLOTS_OLD["${extra_dev}"]=$(bootloader_get_keyslots ${extra_dev})
+    done
 
     # Create the new key to be sealed
     if [[ "$FDE_USE_AUTHORIZED_POLICIES" =~ y.* ]]; then
@@ -51,6 +57,7 @@ function cmd_regenerate_key {
 	fi
 
 	if ! add_secondary_key "$luks_dev" "$opt_keyfile"; then
+	    rm -f "$opt_keyfile"
 	    return 1
 	fi
 
@@ -63,13 +70,24 @@ function cmd_regenerate_key {
     tpm_enable ${luks_dev}
 
     # Remove the previous keyslot
-    if [ -n "${KEYSLOTS_TO_BE_WIPED}" ]; then
-        bootloader_remove_keyslots "${luks_dev}" "${KEYSLOTS_TO_BE_WIPED}"
+    if [ -n "${KEYSLOTS_OLD}" ]; then
+        bootloader_remove_keyslots "${luks_dev}" "${KEYSLOTS_OLD}"
         if [ "$?" -ne 0 ]; then
-            display_errorbox "Failed to wipe out key slots: ${KEYSLOTS_TO_BE_WIPED}"
-            return  1
+            display_errorbox "Failed to wipe out key slots: ${KEYSLOTS_OLD}"
+            return 1
         fi
     fi
+
+    # Remove the previous keyslots in the extra devices
+    for extra_dev in ${FDE_EXTRA_DEVS}; do
+        if [ -n "${EXTRA_KEYSLOTS_OLD[${extra_dev}]}" ]; then
+            bootloader_remove_keyslots "${extra_dev}" "${EXTRA_KEYSLOTS_OLD[${extra_dev}]}"
+            if [ "$?" -ne 0 ]; then
+                display_errorbox "Failed to wipe out key slots in ${extra_dev}: ${EXTRA_KEYSLOTS_OLD[${extra_dev}]}"
+                return 1
+            fi
+        fi
+    done
 
     return 0
 }
