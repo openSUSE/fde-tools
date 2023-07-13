@@ -43,10 +43,6 @@ KIWI_ROOT_KEYFILE=/root/.root.keyfile
 # Set the bootloader specific functions here as aliases
 ##################################################################
 
-function bootloader_enable_fde_pcr_policy {
-    grub_enable_fde_pcr_policy "$@"
-}
-
 function bootloader_enable_fde_without_tpm {
     grub_enable_fde_without_tpm "$@"
 }
@@ -58,18 +54,6 @@ function bootloader_get_fde_password {
 ##################################################################
 # FDE Firstboot functions
 ##################################################################
-
-function fde_protect_tpm {
-
-    local luks_dev=$1
-    local luks_keyfile=$2
-
-    luks_set_random_key "${luks_dev}" "${luks_keyfile}"
-
-    bootloader_enable_fde_pcr_policy "${luks_keyfile}"
-
-    return $?
-}
 
 function fde_protect_notpm {
 
@@ -150,18 +134,12 @@ function fde_setup_encrypted {
     luks_reencrypt "${luks_dev}" "${pass_keyfile}"
 
     if $with_tpm; then
-	# Generate a random key again
-	luks_keyfile="/root/.root.keyfile"
-	luks_add_random_key "${luks_dev}" "${pass_keyfile}" "${luks_keyfile}"
-
-	# FIXME: fde_protect_tpm should not have to change key slot key any more.
-	if ! fde_protect_tpm "${luks_dev}" "${luks_keyfile}"; then
+	if ! fdectl regenerate-key --passfile "${pass_keyfile}"; then
 	    display_errorbox "Failed to protect encrypted volume with TPM"
 	    with_tpm=false
+	else
+	    systemctl enable fde-tpm-enroll.service
 	fi
-
-	rm -f "${luks_keyfile}"
-	luks_keyfile=""
     else
 	# Update grub.cfg to attempt a cryptomount and ask the user for the
 	# password
