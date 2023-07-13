@@ -29,6 +29,7 @@ opt_uefi_bootdir=""
 opt_ui=shell
 opt_keyfile=""
 opt_password=""
+opt_passfile=""
 
 ##################################################################
 # Display a usage message.
@@ -61,6 +62,8 @@ Global options:
   --password
 	Specify the LUKS recovery password. Should be used by the
 	installer only.
+  --passfile
+	Specify the path to a LUKS recovery password file.
 
 Commands:
   help		display this message
@@ -121,7 +124,7 @@ function fde_maybe_chroot {
 
 fde_maybe_chroot "$@"
 
-long_options="help,version,bootloader:,device:,use-dialog,keyfile:,uefi-boot-dir:,password:"
+long_options="help,version,bootloader:,device:,use-dialog,keyfile:,uefi-boot-dir:,password:,passfile:"
 
 if ! getopt -Q -n fdectl -l "$long_options" -o h -- "$@"; then
     fde_usage
@@ -156,6 +159,8 @@ while [ $# -gt 0 ]; do
 	opt_keyfile=$1; shift;;
     --password)
 	opt_password=$1; shift;;
+    --passfile)
+	opt_passfile=$1; shift;;
     --uefi-boot-dir)
 	opt_uefi_bootdir=$1; shift;;
     *)
