@@ -45,7 +45,6 @@ function tpm_enable {
 	if tpm_enable_authorized_policy "$luks_dev"; then
 	    # ... and authorize the current system configuration.
 	    # This is what "fdectl tpm-authorize" does, inlined.
-	    tpm_set_authorized_policy_paths "$FDE_AUTHORIZED_POLICY"
 	    bootloader_authorize_pcr_policy "$FDE_AP_SECRET_KEY" "$FDE_AP_SEALED_SECRET"
 	    st=$?
 	fi

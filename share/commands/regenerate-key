@@ -43,7 +43,6 @@ function cmd_regenerate_key {
 	    return 1
 	fi
 
-	tpm_set_authorized_policy_paths "$FDE_AUTHORIZED_POLICY"
 	if ! tpm_seal_secret "$luks_new_keyfile" "$FDE_AP_SEALED_SECRET" "$FDE_AP_AUTHPOLICY"; then
 	    display_errorbox "Failed to seal secondary LUKS key against TPM Authorized Policy"
 	    rm -f "$luks_new_keyfile"
