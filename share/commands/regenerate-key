@@ -56,7 +56,6 @@ function cmd_regenerate_key {
 	fi
 
 	if ! add_secondary_key "$luks_dev" "$opt_keyfile"; then
-	    rm -f "$opt_keyfile"
 	    return 1
 	fi
 
