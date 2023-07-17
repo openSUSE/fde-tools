@@ -27,8 +27,13 @@ function cmd_add_secondary_key {
 
     luks_dev="$1"
 
+    keyslots=$(bootloader_get_keyslots ${luks_dev})
+
     if [ -n "$FDE_ENROLL_KEY" ]; then
 	display_errorbox "It seems you've already tried to enroll a secondary key."
+	return 1
+    elif [ -n "${keyslots}" ]; then
+	display_errorbox "It seems you've already enrolled a secondary key."
 	return 1
     fi
 
@@ -101,10 +106,6 @@ function add_secondary_key {
 
     luks_dev="$1"
     luks_new_keyfile="$2"
-
-    # FIXME: we should track somewhere whether we've already added a secondary
-    # key or not (eg in /etc/fde). If we have, we should refuse to add another
-    # key.
 
     if ! fde_request_recovery_password; then
 	display_errorbox "Unable to obtain recovery password; aborting."
