@@ -204,7 +204,7 @@ function luks_drop_pass {
     local luks_dev=$1
     old_pass="$2"
 
-    display_infobox "Dropping old recovery password"
+    display_infobox "Dropping old recovery password (${luks_dev})"
     old_keyfile=$(luks_write_password oldpass "${old_pass}")
     if ! cryptsetup luksRemoveKey "${luks_dev}" ${old_keyfile}; then
 	fde_trace "Warning: luksRemoveKey indicates failure"
@@ -223,7 +223,7 @@ function luks_drop_key {
     local luks_dev=$1
     local luks_keyfile="$2"
 
-    display_infobox "Dropping old LUKS key"
+    display_infobox "Dropping old LUKS key (${luks_dev})"
     if ! cryptsetup luksRemoveKey "${luks_dev}" ${luks_keyfile}; then
 	fde_trace "Warning: luksRemoveKey indicates failure"
 	return 1
@@ -240,7 +240,7 @@ function luks_verify_password {
     local luks_dev=$1
     local luks_keyfile="$2"
 
-    display_infobox "Verifying LUKS recovery password"
+    display_infobox "Verifying LUKS recovery password (${luks_dev})"
     if ! cryptsetup open --test-passphrase --key-file "${luks_keyfile}" "${luks_dev}"; then
 	fde_trace "Unable to open the device with the password"
 	return 1
@@ -302,7 +302,7 @@ function luks_add_password {
 	luks_new_password="${result_password}"
     fi
 
-    display_infobox "Updating LUKS password"
+    display_infobox "Updating LUKS password (${luks_dev})"
 
     new_keyfile=$(luks_write_password newpass "${luks_new_password}")
     if ! cryptsetup --key-file "${luks_keyfile}" luksAddKey --pbkdf "$FDE_LUKS_PBKDF" "${luks_dev}" ${new_keyfile}; then
