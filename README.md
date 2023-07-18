@@ -49,7 +49,7 @@ generated password, and will configure the bootloader to use that
 to unlock the system partition on next boot.
 
 If you do not want to be prompted for the recovery password, you can
-also use either the ``--keyfile`` or the ``--password`` option to
+also use either the ``--passfile`` or the ``--password`` option to
 specify a LUKS keyfile, or the recovery passphrase, respectively.
 
 Normally, the first boot into a freshly installed system will dispose
