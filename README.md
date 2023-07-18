@@ -138,6 +138,35 @@ Implicitly, there is a second step involved, which is to actually
 _authorize_ the current system configuration. This will predict a
 set of PCR values, and use the RSA key to sign the resulting PCR policy. 
 
+
+# Key management for the already installed systems
+
+For the systems with an already encrypted root partition, it is easy
+to (re)generate and seal the LUKS key with ``regenerate-key``:
+
+    # fdectl regenerate-key
+
+This command generates a new random secret key, seals the key with TPM,
+and updates the bootloader configuration.
+
+To disable the TPM unsealing temporarily, ``tpm-disable`` will remove
+the path to the sealed key from the boot loader configuration.
+
+    # fdectl tpm-disable
+
+To restore the TPM unsealing functionality, ``tpm-enable`` will update
+the sealed key if necessary and then configure the boot loader to
+unlock the LUKS partition with the sealed key.
+
+    # fdectl tpm-enable
+
+In case there is a need to remove the sealed LUKS key from the root
+partition, ``tpm-wipe`` could help to wipe out the keyslot for the sealed
+LUKS key and remove the key file:
+
+    # fdectl tpm-wipe
+
+
 # Updates of boot components
 
 When updating components such as grub2 or the shim loader, or when
@@ -180,3 +209,18 @@ grub/shim version it wants to authorize. The server would then
 predict PCR values based on the client's event log plus the actual
 hashes of the boot files used, compute the PCR policy and sign it
 using its key.
+
+
+# Revocation of the authorized policies
+
+When a serious vulnerability is found in the boot component such
+as grub2 or the shim loader, it is suggested to remove the
+authorized policies associated with the affected component. However,
+there is no easy way to revoke the already signed and authorized
+polices. The most effective method is to replace the sealed LUKS key
+with ``regenerate-key``:
+
+    # fdectl regenerate-key
+
+Since the old LUKS key is replaced, all those authorized policies
+against the old key are invalidated consequentially.
