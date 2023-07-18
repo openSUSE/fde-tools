@@ -34,6 +34,10 @@ _fdectl() {
         COMPREPLY=( $(compgen -d -- ${cur}) )
         return 0
         ;;
+    --passfile)
+        COMPREPLY=( $(compgen -f -- ${cur}) )
+        return 0
+        ;;
     esac
 
     opts=$( fdectl --help 2>&1 |
