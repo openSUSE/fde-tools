@@ -25,6 +25,7 @@ alias bootloader_enable_fde_without_tpm=grub_enable_fde_without_tpm
 alias bootloader_enable_fde_pcr_policy=grub_enable_fde_pcr_policy
 alias bootloader_enable_fde_authorized_policy=grub_enable_fde_authorized_policy
 alias bootloader_check_sealed_key=grub_check_sealed_key
+alias bootloader_remove_sealed_key=grub_remove_sealed_key
 alias bootloader_authorize_pcr_policy=grub_authorize_pcr_policy
 alias bootloader_set_fde_password=grub_set_fde_password
 alias bootloader_get_fde_password=grub_get_fde_password
@@ -169,6 +170,20 @@ function grub_check_sealed_key {
     return 1
 }
 
+function grub_remove_sealed_key {
+
+    # Remove the sealed key file in the EFI system partition
+    grub_efi_dir=$(uefi_get_current_efidir)
+    if [ -z "$grub_efi_dir" ]; then
+	return 1
+    fi
+    grub_sealed_key="$grub_efi_dir/sealed.tpm"
+
+    if [ -f "${grub_sealed_key}" ]; then
+        rm -f "${grub_sealed_key}"
+    fi
+}
+
 function grub_get_keyslots {
     local luks_dev=$1
 
@@ -207,15 +222,4 @@ function grub_wipe {
     local luks_dev=$1
 
     grub_remove_keyslots ${luks_dev}
-
-    # Remove the sealed key file in the EFI system partition
-    grub_efi_dir=$(uefi_get_current_efidir)
-    if [ -z "$grub_efi_dir" ]; then
-	return 1
-    fi
-    grub_sealed_key="$grub_efi_dir/sealed.tpm"
-
-    if [ -f ${grub_sealed_key} ]; then
-        rm -f "$grub_efi_dir/sealed.tpm"
-    fi
 }

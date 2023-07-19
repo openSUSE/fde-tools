@@ -49,6 +49,9 @@ function tpm_disable {
 
     # Update the bootloader settings without TPM
     bootloader_enable_fde_without_tpm
+
+    bootloader_remove_sealed_key
+
     return $?
 }
 
