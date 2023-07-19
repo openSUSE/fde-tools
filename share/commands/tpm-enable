@@ -165,10 +165,6 @@ function tpm_enable_pcr_policy {
 }
 
 function cmd_tpm_enable {
-    if [[ ! "$FDE_TPM_ENABLE" =~ y.* ]]; then
-        fde_set_variable FDE_TPM_ENABLE "yes"
-    fi
-
     if ! tpm_enable "$1"; then
 	return 1
     fi
