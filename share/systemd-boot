@@ -27,9 +27,11 @@
 alias bootloader_enable_fde_without_tpm=systemd_enable_fde_without_tpm
 alias bootloader_enable_fde_pcr_policy=systemd_enable_fde_pcr_policy
 alias bootloader_enable_fde_authorized_policy=systemd_enable_fde_authorized_policy
+alias bootloader_check_sealed_key=systemd_check_sealed_key
 alias bootloader_authorize_pcr_policy=systemd_authorize_pcr_policy
 alias bootloader_set_fde_password=systemd_set_fde_password
 alias bootloader_get_fde_password=systemd_get_fde_password
+alias bootloader_commit_config=systemd_commit_config
 alias bootloader_get_keyslots=systemd_get_keyslots
 alias bootloader_remove_keyslots=systemd_remove_keyslots
 alias bootloader_wipe=systemd_wipe
@@ -117,6 +119,23 @@ function systemd_enable_fde_pcr_policy {
 # tpm-disable.
 ##################################################################
 function systemd_enable_fde_without_tpm {
+
+    not_implemented
+}
+
+##################################################################
+# This function checks whether the sealed LUKS key exists or not
+##################################################################
+function systemd_check_sealed_key {
+
+    not_implemented
+}
+
+##################################################################
+# This function implements the boot loader specific part to commit
+# changes to systemd-boot configuration.
+##################################################################
+function systemd_commit_config {
 
     not_implemented
 }

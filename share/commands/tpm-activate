@@ -23,12 +23,20 @@ alias cmd_requires_luks_device=true
 alias cmd_perform=cmd_tpm_activate
 
 function cmd_tpm_activate {
+
+    luks_dev="$1"
+
     if [[ ! "$FDE_TPM_ENABLE" =~ y.* ]]; then
 	fde_trace "TPM key unsealing disabled"
         return 0
     fi
 
-    if ! tpm_enable "$1"; then
+    if bootloader_check_sealed_key "${luks_dev}"; then
+        fde_trace "LUKS key already sealed. Skip activation."
+        return 0
+    fi
+
+    if ! tpm_enable "${luks_dev}"; then
 	return 1
     fi
 

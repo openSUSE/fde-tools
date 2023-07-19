@@ -24,6 +24,7 @@
 alias bootloader_enable_fde_without_tpm=grub_enable_fde_without_tpm
 alias bootloader_enable_fde_pcr_policy=grub_enable_fde_pcr_policy
 alias bootloader_enable_fde_authorized_policy=grub_enable_fde_authorized_policy
+alias bootloader_check_sealed_key=grub_check_sealed_key
 alias bootloader_authorize_pcr_policy=grub_authorize_pcr_policy
 alias bootloader_set_fde_password=grub_set_fde_password
 alias bootloader_get_fde_password=grub_get_fde_password
@@ -152,6 +153,20 @@ function grub_enable_fde_without_tpm {
     # Update grub.cfg inside the EFI partition without enabling the TPM
     # key protector.
     grub_update_early_config
+}
+
+function grub_check_sealed_key {
+
+    grub_efi_dir=$(uefi_get_current_efidir)
+    if [ -z "$grub_efi_dir" ]; then
+	return 1
+    fi
+
+    if [ -f "$grub_efi_dir/sealed.tpm" ]; then
+        return 0
+    fi
+
+    return 1
 }
 
 function grub_get_keyslots {
