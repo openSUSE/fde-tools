@@ -224,3 +224,15 @@ with ``regenerate-key``:
 
 Since the old LUKS key is replaced, all those authorized policies
 against the old key are invalidated consequentially.
+
+# LUKS key management on devices other than the root partition
+
+By default, ``fdectl`` only manage the keyslots of the root partition.
+To extend the key management, the extra devices(partitions) can be
+specified in __/etc/sysconfig/fde-tools__ like this:
+
+    FDE_EXTRA_DEVS="/dev/sda3 /dev/sda4"
+
+It requires those devices(partitions) sharing the same recovery
+password as the root partition. Once the variable is set properly,
+``fdectl`` will iterate the list and apply the corresponding commands.
