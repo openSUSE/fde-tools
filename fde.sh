@@ -22,7 +22,7 @@ shopt -s expand_aliases
 
 : ${SHAREDIR:=/usr/share/fde}
 
-version=0.6.5
+version=0.6.6
 
 opt_bootloader=grub2
 opt_uefi_bootdir=""
