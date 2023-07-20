@@ -32,9 +32,6 @@ function fde_request_recovery_password {
     if [ -n "$opt_password" ]; then
 	result_password="$opt_password"
 	return 0
-    elif [ -n "$opt_passfile" -a -f "$opt_passfile" ]; then
-	result_password="$(<$opt_passfile)"
-	return 0
     fi
 
     # Ask for the recovery password just once
@@ -50,6 +47,23 @@ function fde_request_recovery_password {
 
     __fde_cached_recovery_password="$result_password"
     return 0
+}
+
+##################################################################
+# Obtain the recovery password and copy it to a file
+##################################################################
+function fde_request_recovery_passfile {
+
+    outfile=$1
+
+    if [ -n "$opt_passfile" -a -f "$opt_passfile" ]; then
+	cp "$opt_passfile" "$outfile"
+    else
+	if ! fde_request_recovery_password; then
+	    return 1
+	fi
+	echo -n "${result_password}" > "$outfile"
+    fi
 }
 
 function fde_set_variable {

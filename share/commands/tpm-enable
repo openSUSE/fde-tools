@@ -139,12 +139,12 @@ function tpm_enable_pcr_policy {
 	    return 1
 	fi
     else
-	if ! fde_request_recovery_password; then
+	luks_keyfile=$(fde_make_tempfile pass.key)
+	if ! fde_request_recovery_passfile "$luks_keyfile"; then
 	    display_errorbox "Unable to obtain recovery password; aborting."
 	    return 1
 	fi
 
-	luks_keyfile=$(luks_write_password pass "${result_password}")
 	luks_new_keyfile=$(fde_make_tempfile new.key)
 
 	if ! luks_add_random_key "${luks_dev}" "${luks_keyfile}" "${luks_new_keyfile}"; then
