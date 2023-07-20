@@ -280,7 +280,7 @@ function luks_change_password {
     new_keyfile=$(luks_write_password newpass "${result_password}")
     if ! cryptsetup --key-file "${old_keyfile}" luksChangeKey --pbkdf "$FDE_LUKS_PBKDF" "${luks_dev}" ${new_keyfile}; then
 	# FIXME: dialog
-	fde_trace "Warning: luksAddKey indicates failure"
+	fde_trace "Warning: luksChangeKey indicates failure"
 	return 1
     fi
 
