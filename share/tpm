@@ -165,7 +165,7 @@ function tpm_create_authorized_policy {
 	--algorithm $FDE_SEAL_PCR_BANK \
         create-authorized-policy $FDE_SEAL_PCR_LIST
     if [ $? -ne 0 ]; then
-	return $?
+	return 1
     fi
 
     # Store the public key in a format suitable for feeding it to the TPM
@@ -175,7 +175,7 @@ function tpm_create_authorized_policy {
 		--public-key "$public_key" \
 		store-public-key
 	if [ $? -ne 0 ]; then
-	    return $?
+	    return 1
 	fi
     fi
 }
