@@ -48,7 +48,9 @@ function cmd_add_secondary_key {
 	bootloader_commit_config
     fi
 
-    enroll_tpm_secondary_key "$luks_dev"
+    if ! enroll_tpm_secondary_key "${luks_dev}"; then
+	return 1
+    fi
 
     return 0
 }

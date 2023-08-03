@@ -35,7 +35,9 @@ function cmd_regenerate_key {
         EXTRA_KEYSLOTS_OLD["${extra_dev}"]=$(bootloader_get_keyslots ${extra_dev})
     done
 
-    enroll_tpm_secondary_key "${luks_dev}"
+    if ! enroll_tpm_secondary_key "${luks_dev}"; then
+	return 1
+    fi
 
     # Finish TPM key sealing
     tpm_enable ${luks_dev}
