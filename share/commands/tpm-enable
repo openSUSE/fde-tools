@@ -145,6 +145,20 @@ function tpm_enable_pcr_policy {
 	    return 1
 	fi
 
+	if ! luks_verify_password "$luks_dev" "$luks_keyfile"; then
+	    rm -f "$luks_keyfile"
+	    display_errorbox "Failed to verify password on LUKS partition"
+	    return 1
+	fi
+
+	for extra_dev in ${FDE_EXTRA_DEVS}; do
+	    if ! luks_verify_password "$extra_dev" "$luks_keyfile"; then
+		rm -f "$luks_keyfile"
+		display_errorbox "Failed to verify password on LUKS partition($extra_dev)"
+		return 1
+	    fi
+	done
+
 	luks_new_keyfile=$(fde_make_tempfile new.key)
 
 	if ! luks_add_random_key "${luks_dev}" "${luks_keyfile}" "${luks_new_keyfile}"; then
@@ -152,6 +166,15 @@ function tpm_enable_pcr_policy {
 	    rm -f "$luks_keyfile" "$luks_new_keyfile"
 	    return 1
 	fi
+
+	# Add the new random key to the devices in FDE_EXTRA_DEVS
+	for extra_dev in ${FDE_EXTRA_DEVS}; do
+	    if ! luks_add_key "$extra_dev" "$luks_keyfile" "$luks_new_keyfile"; then
+		display_errorbox "Failed to add secondary LUKS key (${extra_dev})"
+		rm -f "$luks_keyfile"
+		return 1
+	    fi
+	done
 
 	rm -f "$luks_keyfile"
     fi
