@@ -50,7 +50,7 @@ function luks_device_for_path {
 
     path="$1"
 
-    df "$path" | grep /dev/ | cut -f1 -d' '
+    df --output=source "$path" | grep /dev/
 }
 
 ##################################################################
