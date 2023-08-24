@@ -204,7 +204,6 @@ FDE_CONFIG_DIR=/etc/fde
 . "$SHAREDIR/commands/$command"
 
 if cmd_requires_luks_device; then
-    # FIXME: This code needs some love to make it work for LUKS-over-LVM
     fsdev=$(luks_device_for_path /)
     if [ ! -b "$fsdev" ]; then
 	fde_bad_argument "Unable to determine partition to operate on"

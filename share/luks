@@ -101,36 +101,17 @@ function luks_get_volume_for_fsdev {
 	dev="/dev/mapper/$dm_name"
     fi
 
-    link=$(readlink "$dev")
+    # Trace back the block devices to locate the first device with
+    # 'crypto_LUKS' file system type
+    # - lsblk options
+    #   -s: inverse dependencies
+    #   -n: no header line
+    #   -r: raw format
+    #   -p: full device path
+    #   -o: print only NAME and FSTYPE
+    dev_path=$(lsblk -snrp -o NAME,FSTYPE ${dev} | grep -m 1 crypto_LUKS | cut -d' ' -f 1)
 
-    # When using the LUKS volume directly to hold the root fs,
-    # we'll be chasing be /dev/mapper/root -> dm-0 -> sdaN
-    # When stacking LUKS + LVM, we're going to chase
-    # /dev/mapper/root -> dm-1 -> dm-0 -> sdaN
-    dev_name=$(basename "$link")
-
-    # Turtles all the way down, but not indefinitely
-    for i in $(seq 10); do
-	vdir="/sys/devices/virtual/block/$dev_name"
-	if [ ! -d "$vdir/slaves" ]; then
-	    break
-	fi
-
-	set -- $(ls "$vdir/slaves")
-	if [ $# -ne 1 ]; then
-	    fde_trace "Ambiguous slave count for $dev_name"
-	    return 1
-	fi
-
-	dev_name="$1"
-    done
-
-    if [ -z "$dev_name" ]; then
-	fde_trace "Failed to chase DM chain for $orig_dev"
-	return 1
-    fi
-
-    echo "/dev/$dev_name"
+    echo "${dev_path}"
     return 0
 }
 
