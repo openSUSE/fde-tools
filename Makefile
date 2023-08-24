@@ -1,4 +1,5 @@
-PKGNAME		= fde-tools-$(shell ./fde.sh --version)
+PKGVER		= $(shell git describe --tags)
+PKGNAME		= fde-tools-$(PKGVER)
 
 CCOPT		= -O0 -g
 LIBDIR		= /usr/lib64
@@ -98,6 +99,7 @@ build/%.o: src/%.c
 dist:
 	mkdir -p $(PKGNAME)
 	cp -a Makefile sysconfig.fde fde.sh src share firstboot $(SUBDIRS) $(PKGNAME)
+	sed -i "s/__VERSION__/0.1/" $(PKGNAME)/fde.sh
 	@find $(PKGNAME) -name '.*.swp' -o -name '*.{rej,orig}' -exec rm {} \;
 	tar -cvjf $(PKGNAME).tar.bz2 $(PKGNAME)/*
 	rm -rf $(PKGNAME)
