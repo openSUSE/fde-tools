@@ -278,8 +278,8 @@ function fde_systemd_firstboot {
 
     display_infobox "Full Disk Encryption with TPM2 support"
 
-    set -x
-    exec 2>/var/log/fde-firstboot.log
+    # Redirect the fde_trace messages from stderr to journald
+    exec 2> >(systemd-cat -t fde-tools -p info)
 
     # Get the password that was used during installation.
     fde_root_passphrase=$(bootloader_get_fde_password)
@@ -295,8 +295,6 @@ function fde_systemd_firstboot {
     # FIXME: rather than hard-coding the recovery password here,
     # have kiwi write it to /.root.something and read it from there
     fde_firstboot $(luks_device_for_path "/") "$KIWI_ROOT_KEYFILE" "$fde_root_passphrase"
-
-    set +x
 
     fde_clean_tempdir
 }

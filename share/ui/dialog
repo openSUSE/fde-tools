@@ -66,13 +66,14 @@ fi
 ##################################################################
 function display_errorbox {
 
+    logger -t fde-tools -p local0.err "$*"
     d --title ERROR --msgbox "$*" 8 60
 }
 
 function display_infobox {
 
+    logger -t fde-tools -p local0.info "$*"
     d --infobox "$*" 5 40
-
 }
 
 ##################################################################
