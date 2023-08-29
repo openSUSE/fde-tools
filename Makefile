@@ -99,7 +99,7 @@ build/%.o: src/%.c
 dist:
 	mkdir -p $(PKGNAME)
 	cp -a Makefile sysconfig.fde fde.sh src share firstboot cryptsetup $(SUBDIRS) $(PKGNAME)
-	sed -i "s/__VERSION__/0.1/" $(PKGNAME)/fde.sh
+	sed -i "s/__VERSION__/$(PKGVER)/" $(PKGNAME)/fde.sh
 	@find $(PKGNAME) -name '.*.swp' -o -name '*.{rej,orig}' -exec rm {} \;
 	tar -cvjf $(PKGNAME).tar.bz2 $(PKGNAME)/*
 	rm -rf $(PKGNAME)
