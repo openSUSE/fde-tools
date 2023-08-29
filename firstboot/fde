@@ -152,6 +152,13 @@ function fde_setup_encrypted {
     # Remove the password file
     rm -f ${pass_keyfile}
 
+    # Update /boot/grub2/grub.cfg
+    if test -d "/boot/writable"; then
+	transactional-update grub.cfg
+    else
+	grub2-mkconfig -o /boot/grub2/grub.cfg
+    fi
+
     if $with_pass || $with_tpm || $with_ccid; then
 	: all is well
     else
