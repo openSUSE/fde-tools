@@ -155,6 +155,7 @@ function fde_setup_encrypted {
     # Update /boot/grub2/grub.cfg
     if test -d "/boot/writable"; then
 	transactional-update grub.cfg
+	transactional-update apply
     else
 	grub2-mkconfig -o /boot/grub2/grub.cfg
     fi
