@@ -1,0 +1,60 @@
+#!/bin/bash
+#
+#   Copyright (C) 2023 SUSE LLC
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#
+#   Written by Gary Lin <glin@suse.com>
+
+CRYPTTAB="/etc/crypttab"
+FDE_SYSCONFIG="/etc/sysconfig/fde-tools"
+GRUB2_DEFAULT="/etc/default/grub"
+FDECTL="/usr/sbin/fdectl"
+
+# Exit if crypttab doesn't exist
+if [ ! -f ${CRYPTTAB} ]; then
+    exit
+fi
+
+# Exit if fde-tools is not installed
+if [ ! -f ${FDE_SYSCONFIG} -o ! -x ${FDECTL} ]; then
+    exit
+fi
+
+source ${FDE_SYSCONFIG}
+
+# Exit if authorized policy is not enabled
+if ! [[ "$FDE_USE_AUTHORIZED_POLICIES" =~ y.* ]]; then
+    exit
+fi
+
+# Exit if auto-update is not enabled
+if ! [[ "$FDE_TPM_AUTO_UPDATE" =~ y.* ]]; then
+    exit
+fi
+
+# Check if the system enables TPM auto-unlock
+if [ -f ${GRUB2_DEFAULT} ]; then
+    source ${GRUB2_DEFAULT}
+    # Exit if there is no sealed key for grub2
+    if [ -z "${GRUB_TPM2_SEALED_KEY}" ]; then
+	exit
+    fi
+fi
+
+# TODO Compare the diff in the event log
+
+# Update the signature in the sealed key
+${FDECTL} tpm-authorize

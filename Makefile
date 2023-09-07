@@ -8,6 +8,8 @@ SYSCONFIGDIR	= /etc/sysconfig
 FDE_CONFIG_DIR	= /etc/fde
 FDE_SHARE_DIR	= /usr/share/fde
 FIRSTBOOTDIR	= /usr/share/jeos-firstboot
+FDE_HELPER_DIR	= /usr/libexec/fde
+RPM_MACRO_DIR	= /etc/rpm
 CFLAGS		= -Wall $(CCOPT)
 FIDO_LINK	= -lfido2 -lcrypto
 CRPYT_LINK	= -lcryptsetup -ljson-c
@@ -15,6 +17,7 @@ TOOLS		= fde-token fdectl-grub-tpm2
 TOKEN_LINK	= -lcryptsetup
 TOKEN_ABI_PATH	= cryptsetup/libcryptsetup-token.sym
 TOKEN_PLUGINS	= libcryptsetup-token-grub-tpm2.so
+TPM_HELPER	= fde-tpm-helper
 
 LIBSCRIPTS	= grub2 \
 		  luks \
@@ -56,12 +59,16 @@ install::
 	@cp -v firstboot/fde $(DESTDIR)$(FIRSTBOOTDIR)/modules/fde
 	@mkdir -p $(DESTDIR)$(SYSCONFIGDIR)
 	@cp -v sysconfig.fde $(DESTDIR)$(SYSCONFIGDIR)/fde-tools
+	@mkdir -p $(DESTDIR)$(RPM_MACRO_DIR)
+	@cp -v rpm-build/macros.fde-tpm-helper $(DESTDIR)$(RPM_MACRO_DIR)
 	@mkdir -p $(DESTDIR)$(FDE_SHARE_DIR)
 	@for name in $(LIBSCRIPTS); do \
 		d=$$(dirname $$name); \
 		mkdir -p $(DESTDIR)$(FDE_SHARE_DIR)/$$d; \
 		cp -v share/$$name $(DESTDIR)$(FDE_SHARE_DIR)/$$d; \
 	done
+	@mkdir -p $(DESTDIR)$(FDE_HELPER_DIR)/
+	@install -m 755 rpm-build/$(TPM_HELPER) $(DESTDIR)$(FDE_HELPER_DIR)/$(TPM_HELPER)
 	@mkdir -p $(DESTDIR)$(SBINDIR)
 	@install -m 555 -v fde.sh $(DESTDIR)$(SBINDIR)/fdectl
 	@install -m 755 -v -d $(DESTDIR)$(FDE_CONFIG_DIR)
@@ -98,7 +105,8 @@ build/%.o: src/%.c
 
 dist:
 	mkdir -p $(PKGNAME)
-	cp -a Makefile sysconfig.fde fde.sh src share firstboot cryptsetup $(SUBDIRS) $(PKGNAME)
+	cp -a Makefile sysconfig.fde fde.sh src share firstboot cryptsetup rpm-build \
+	      $(SUBDIRS) $(PKGNAME)
 	sed -i "s/__VERSION__/$(PKGVER)/" $(PKGNAME)/fde.sh
 	@find $(PKGNAME) -name '.*.swp' -o -name '*.{rej,orig}' -exec rm {} \;
 	tar -cvjf $(PKGNAME).tar.bz2 $(PKGNAME)/*

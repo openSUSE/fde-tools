@@ -29,3 +29,8 @@ FDE_ENROLL_NEW_KEY=""
 # NOTE: Those devices must use the same recovery password as the one of the
 # root partition.
 FDE_EXTRA_DEVS=""
+
+# Configure whether to update the authorized policy in the sealed key after
+# the bootloader update
+# Set to yes/no
+FDE_TPM_AUTO_UPDATE="yes"

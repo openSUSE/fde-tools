@@ -1,0 +1,13 @@
+%fde_tpm_update_requires Requires(posttrans): fde-tpm-helper
+
+%fde_tpm_update_post() \
+mkdir -p %{_rundir}/fde-tpm-helper/ \
+touch %{_rundir}/fde-tpm-helper/update \
+%nil
+
+%fde_tpm_update_posttrans() \
+if test -f %{_rundir}/fde-tpm-helper/update; then \
+  rm -f %{_rundir}/fde-tpm-helper/update \
+  %{_libexecdir}/fde/fde-tpm-helper || : \
+fi \
+%nil
