@@ -1,16 +1,18 @@
 PKGVER		= $(shell git describe --tags)
 PKGNAME		= fde-tools-$(PKGVER)
 
-CCOPT		= -O0 -g
-LIBDIR		= /usr/lib64
-SBINDIR		= /usr/sbin
-SYSCONFIGDIR	= /etc/sysconfig
-FDE_CONFIG_DIR	= /etc/fde
-FDE_SHARE_DIR	= /usr/share/fde
-FIRSTBOOTDIR	= /usr/share/jeos-firstboot
-FDE_HELPER_DIR	= /usr/libexec/fde
+CFLAGS		?= -Wall -O0 -g
+LIBDIR		?= /usr/lib64
+LIBEXECDIR	?= /usr/libexec
+SBINDIR		?= /usr/sbin
+DATADIR		?= /usr/share
+SYSCONFDIR	?= /etc
+SYSCONFIGDIR	= $(SYSCONFDIR)/sysconfig
+FDE_CONFIG_DIR	= ${SYSCONFDIR}/fde
+FDE_SHARE_DIR	= $(DATADIR)/fde
+FIRSTBOOTDIR	= $(DATADIR)/jeos-firstboot
+FDE_HELPER_DIR	= $(LIBEXECDIR)/fde
 RPM_MACRO_DIR	= /etc/rpm
-CFLAGS		= -Wall $(CCOPT)
 FIDO_LINK	= -lfido2 -lcrypto
 CRPYT_LINK	= -lcryptsetup -ljson-c
 TOOLS		= fde-token fdectl-grub-tpm2
@@ -47,8 +49,8 @@ SUBDIRS := man bash-completion
 all:: $(TOOLS) $(SUBDIRS) $(TOKEN_PLUGINS)
 
 install:: $(TOOLS)
-	install -d $(DESTDIR)/usr/sbin
-	install -m 755 $(TOOLS) $(DESTDIR)/usr/sbin
+	install -d $(DESTDIR)$(SBINDIR)
+	install -m 755 $(TOOLS) $(DESTDIR)$(SBINDIR)
 
 install:: $(TOKEN_PLUGINS)
 	install -d $(DESTDIR)/$(LIBDIR)/cryptsetup
