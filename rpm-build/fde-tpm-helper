@@ -23,6 +23,8 @@ FDE_SYSCONFIG="/etc/sysconfig/fde-tools"
 GRUB2_DEFAULT="/etc/default/grub"
 FDECTL="/usr/sbin/fdectl"
 
+COMPONENTS="$@"
+
 # Exit if crypttab doesn't exist
 if [ ! -f ${CRYPTTAB} ]; then
     exit
@@ -30,18 +32,6 @@ fi
 
 # Exit if fde-tools is not installed
 if [ ! -f ${FDE_SYSCONFIG} -o ! -x ${FDECTL} ]; then
-    exit
-fi
-
-source ${FDE_SYSCONFIG}
-
-# Exit if authorized policy is not enabled
-if ! [[ "$FDE_USE_AUTHORIZED_POLICIES" =~ y.* ]]; then
-    exit
-fi
-
-# Exit if auto-update is not enabled
-if ! [[ "$FDE_TPM_AUTO_UPDATE" =~ y.* ]]; then
     exit
 fi
 
@@ -54,7 +44,27 @@ if [ -f ${GRUB2_DEFAULT} ]; then
     fi
 fi
 
+source ${FDE_SYSCONFIG}
+
+# Exit if authorized policy is not enabled
+if ! [[ "$FDE_USE_AUTHORIZED_POLICIES" =~ y.* ]]; then
+    echo "Bootloader(s) updated and authorized policy disabled."
+    echo "Please update the sealed key with 'fdectl regenerate-key'."
+    echo "Updated bootloader(s): ${COMPONENTS}"
+    exit
+fi
+
+# Exit if auto-update is not enabled
+if ! [[ "$FDE_TPM_AUTO_UPDATE" =~ y.* ]]; then
+    echo "Bootloader(s) updated and signature auto-update disabled."
+    echo "Please update the signature with 'fdectl tpm-authorize'."
+    echo "Updated bootloader(s): ${COMPONENTS}"
+    exit
+fi
+
 # TODO Compare the diff in the event log
+#      The boot components to update: ${COMPONENTS}
 
 # Update the signature in the sealed key
+echo "Update the signature due to changes in \"${COMPONENTS}\""
 ${FDECTL} tpm-authorize
