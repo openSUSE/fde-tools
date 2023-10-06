@@ -42,13 +42,47 @@ function tpm_present_and_working {
     return 0
 }
 
+function tpm_set_rsa_key_size {
+
+    # Check if pcr-oracle supports rsa-test
+    # If pcr-oracle prints "Unknown action", fall back to default.
+    if pcr-oracle rsa-test 2>&1 | grep -q "Unknown action"; then
+	fde_set_variable FDE_RSA_KEY_SIZE "2048"
+	return 0
+    fi
+
+    # Find the highest supported RSA key size
+    sizes_to_test="4096 3072 2048"
+
+    for size in ${sizes_to_test}; do
+	if pcr-oracle --rsa-bits ${size} rsa-test > /dev/null 2>&1; then
+	    fde_set_variable FDE_RSA_KEY_SIZE "${size}"
+	    return 0
+	fi
+    done
+
+    fde_trace "Failed to find a valid RSA key size"
+    return 1
+}
+
 function tpm_seal_key {
 
     secret=$1
     sealed_secret=$2
 
+    tpm_set_rsa_key_size
+    if [ $? -ne 0 ]; then
+	return 1
+    fi
+
+    opt_rsa_bits=
+    if [ -n "${FDE_RSA_KEY_SIZE}" -a ${FDE_RSA_KEY_SIZE} -ne 2048 ]; then
+	opt_rsa_bits="--rsa-bits ${FDE_RSA_KEY_SIZE}"
+    fi
+
     echo "Sealing secret against PCR policy covering $FDE_SEAL_PCR_LIST" >&2
-    pcr-oracle --input "$secret" --output "$sealed_secret" \
+    pcr-oracle ${opt_rsa_bits} \
+			--input "$secret" --output "$sealed_secret" \
 			--key-format tpm2.0 \
 			--algorithm "$FDE_SEAL_PCR_BANK" \
 			--from eventlog \
@@ -97,17 +131,22 @@ function tpm_test {
     return $result
 }
 
-
 function tpm_seal_secret {
 
     secret="$1"
     sealed_secret="$2"
     authorized_policy="$3"
 
+    opt_rsa_bits=
+    if [ -n "${FDE_RSA_KEY_SIZE}" -a ${FDE_RSA_KEY_SIZE} -ne 2048 ]; then
+	opt_rsa_bits="--rsa-bits ${FDE_RSA_KEY_SIZE}"
+    fi
+
     # If we are expected to use an authorized policy, seal the secret
     # against that, using pcr-oracle rather than the tpm2 tools
     if [ -n "$authorized_policy" ]; then
-	pcr-oracle --authorized-policy "$authorized_policy" \
+	pcr-oracle ${opt_rsa_bits} \
+			--authorized-policy "$authorized_policy" \
 			--key-format tpm2.0 \
 			--input $secret \
 			--output $sealed_secret \
@@ -157,6 +196,14 @@ function tpm_create_authorized_policy {
     extra_opts=
     if [ ! -f "$secret_key" ]; then
 	extra_opts="--rsa-generate-key"
+
+	tpm_set_rsa_key_size
+        if [ $? -ne 0 ]; then
+	    return 1
+	fi
+	if [ -n "${FDE_RSA_KEY_SIZE}" -a ${FDE_RSA_KEY_SIZE} -ne 2048 ]; then
+	    extra_opts="${extra_opts} --rsa-bits ${FDE_RSA_KEY_SIZE}"
+	fi
     fi
 
     pcr-oracle $extra_opts \
