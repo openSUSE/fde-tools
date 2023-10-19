@@ -209,10 +209,19 @@ if cmd_requires_luks_device; then
 	fde_bad_argument "Unable to determine partition to operate on"
     fi
 
-    luks_dev=$(luks_get_volume_for_fsdev "$fsdev")
-    if [ -z "$luks_dev" ]; then
+    luks_devices=$(luks_get_volume_for_fsdev "$fsdev")
+    if [ -z "$luks_devices" ]; then
 	display_errorbox "Cannot find the underlying partition for $fsdev"
 	exit 1
+    fi
+
+    # There may be more than one LUKS PV under the root in LVM.
+    # Extract the first device as the main root device and prepend other
+    # PVs to FDE_EXTRA_DEVS.
+    luks_dev=$(head -n 1 <<<${luks_devices})
+    extra_root_devs=$(grep -v "${luks_dev}" <<<${luks_devices})
+    if [ -n "${extra_root_devs}" ]; then
+	FDE_EXTRA_DEVS="$(tr '\n' ' ' <<<${extra_root_devs})${FDE_EXTRA_DEVS}"
     fi
 
     cmd_perform "$luks_dev"

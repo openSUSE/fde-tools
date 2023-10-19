@@ -84,7 +84,7 @@ function luks_dm_name_for_device {
 }
 
 ##################################################################
-# Locate the underlying partition of LUKS encrypted device
+# Locate the underlying partition(s) of LUKS encrypted device
 ##################################################################
 function luks_get_volume_for_fsdev {
 
@@ -101,7 +101,7 @@ function luks_get_volume_for_fsdev {
 	dev="/dev/mapper/$dm_name"
     fi
 
-    # Trace back the block devices to locate the first device with
+    # Trace back the block devices to locate the devices with
     # 'crypto_LUKS' file system type
     # - lsblk options
     #   -s: inverse dependencies
@@ -109,9 +109,12 @@ function luks_get_volume_for_fsdev {
     #   -r: raw format
     #   -p: full device path
     #   -o: print only NAME and FSTYPE
-    dev_path=$(lsblk -snrp -o NAME,FSTYPE ${dev} | grep -m 1 crypto_LUKS | cut -d' ' -f 1)
+    #
+    # NOTE: A LVM device may contain multiple 'crypto_LUKS' devices.
+    #       Use 'tac' to invert the order again since '-s' is used in 'lsblk'.
+    luks_devices=$(lsblk -snrp -o NAME,FSTYPE ${dev} | grep crypto_LUKS | cut -d' ' -f 1 | tac)
 
-    echo "${dev_path}"
+    echo "${luks_devices}"
     return 0
 }
 
