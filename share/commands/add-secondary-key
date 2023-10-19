@@ -17,9 +17,6 @@
 #
 #   Written by Olaf Kirch <okir@suse.com>
 
-# Needed by the secondary-password hack below.
-. $SHAREDIR/commands/add-secondary-password
-
 alias cmd_requires_luks_device=true
 alias cmd_perform=cmd_add_secondary_key
 
