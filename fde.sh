@@ -204,6 +204,10 @@ FDE_CONFIG_DIR=/etc/fde
 . "$SHAREDIR/commands/$command"
 
 if cmd_requires_luks_device; then
+    # Merge FDE_EXTRA_DEVS into FDE_DEVS and unset FDE_EXTRA_DEVS
+    FDE_DEVS="${FDE_DEVS} ${FDE_EXTRA_DEVS}"
+    FDE_EXTRA_DEVS=""
+
     fsdev=$(luks_device_for_path /)
     if [ ! -b "$fsdev" ]; then
 	fde_bad_argument "Unable to determine partition to operate on"
@@ -215,14 +219,13 @@ if cmd_requires_luks_device; then
 	exit 1
     fi
 
-    # There may be more than one LUKS PV under the root in LVM.
-    # Extract the first device as the main root device and prepend other
-    # PVs to FDE_EXTRA_DEVS.
+    # Merge FDE_DEVS and detected devices and remove duplicate devices
+    luks_devices=$(tr -s '[:space:]' '\n' <<<"${luks_devices} ${FDE_DEVS}" | sed '/^$/d' | sort -u)
+
+    # Extract the first device as the main root device and set others
+    # to FDE_EXTRA_DEVS.
     luks_dev=$(head -n 1 <<<${luks_devices})
-    extra_root_devs=$(grep -v "${luks_dev}" <<<${luks_devices})
-    if [ -n "${extra_root_devs}" ]; then
-	FDE_EXTRA_DEVS="$(tr '\n' ' ' <<<${extra_root_devs})${FDE_EXTRA_DEVS}"
-    fi
+    FDE_EXTRA_DEVS=$(grep -v "${luks_dev}" <<<${luks_devices})
 
     cmd_perform "$luks_dev"
 else

@@ -25,10 +25,12 @@ FDE_TRACING=true
 # to enroll on the next reboot
 FDE_ENROLL_NEW_KEY=""
 
-# Specify the devices to be managed by fdectl other than the root partition
-# NOTE: Those devices must use the same recovery password as the one of the
-# root partition.
-FDE_EXTRA_DEVS=""
+# Specify the devices to be managed by fdectl
+# NOTE: Those devices must use the same recovery password.
+FDE_DEVS=""
+
+# [DEPRECATED] Use FDE_DEVS instead
+# FDE_EXTRA_DEVS=""
 
 # Configure whether to update the authorized policy in the sealed key after
 # the bootloader update
