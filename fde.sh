@@ -223,12 +223,7 @@ if cmd_requires_luks_device; then
     # Merge FDE_DEVS and detected devices and remove duplicate devices
     luks_devices=$(tr -s '[:space:]' '\n' <<<"${luks_devices} ${FDE_DEVS}" | sed '/^$/d' | sort -u)
 
-    # Extract the first device as the main root device and set others
-    # to FDE_EXTRA_DEVS.
-    luks_dev=$(head -n 1 <<<${luks_devices})
-    FDE_EXTRA_DEVS=$(grep -v "${luks_dev}" <<<${luks_devices})
-
-    cmd_perform "$luks_dev"
+    cmd_perform "$luks_devices"
 else
     cmd_perform
 fi

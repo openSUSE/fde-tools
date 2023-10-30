@@ -24,14 +24,14 @@ alias cmd_perform=cmd_tpm_activate
 
 function cmd_tpm_activate {
 
-    luks_dev="$1"
+    local luks_devices="$1"
 
-    if bootloader_check_sealed_key "${luks_dev}"; then
+    if bootloader_check_sealed_key; then
         fde_trace "LUKS key already sealed. Skip activation."
         return 0
     fi
 
-    if ! tpm_enable "${luks_dev}"; then
+    if ! tpm_enable "${luks_devices}"; then
 	return 1
     fi
 

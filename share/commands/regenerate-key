@@ -24,39 +24,27 @@ alias cmd_requires_luks_device=true
 alias cmd_perform=cmd_regenerate_key
 
 function cmd_regenerate_key {
-    luks_dev="$1"
-    declare -A EXTRA_KEYSLOTS_OLD
+    local luks_devices="$1"
+    declare -A KEYSLOTS_OLD
 
     # Get the current keyslots for the TPM sealed key
-    KEYSLOTS_OLD=$(bootloader_get_keyslots ${luks_dev})
-
-    # Get the current keyslots in the extra devices
-    for extra_dev in ${FDE_EXTRA_DEVS}; do
-        EXTRA_KEYSLOTS_OLD["${extra_dev}"]=$(bootloader_get_keyslots ${extra_dev})
+    for luks_dev in ${luks_devices}; do
+        KEYSLOTS_OLD["${luks_dev}"]=$(bootloader_get_keyslots ${luks_dev})
     done
 
-    if ! enroll_tpm_secondary_key "${luks_dev}"; then
+    if ! enroll_tpm_secondary_key "${luks_devices}"; then
 	return 1
     fi
 
     # Finish TPM key sealing
-    tpm_enable ${luks_dev}
+    tpm_enable "${luks_devices}"
 
-    # Remove the previous keyslot
-    if [ -n "${KEYSLOTS_OLD}" ]; then
-        bootloader_remove_keyslots "${luks_dev}" "${KEYSLOTS_OLD}"
-        if [ "$?" -ne 0 ]; then
-            display_errorbox "Failed to wipe out key slots: ${KEYSLOTS_OLD}"
-            return 1
-        fi
-    fi
-
-    # Remove the previous keyslots in the extra devices
-    for extra_dev in ${FDE_EXTRA_DEVS}; do
-        if [ -n "${EXTRA_KEYSLOTS_OLD[${extra_dev}]}" ]; then
-            bootloader_remove_keyslots "${extra_dev}" "${EXTRA_KEYSLOTS_OLD[${extra_dev}]}"
+    # Remove the previous keyslots
+    for luks_dev in ${luks_devices}; do
+        if [ -n "${KEYSLOTS_OLD[${luks_dev}]}" ]; then
+            bootloader_remove_keyslots "${luks_dev}" "${KEYSLOTS_OLD[${luks_dev}]}"
             if [ "$?" -ne 0 ]; then
-                display_errorbox "Failed to wipe out key slots in ${extra_dev}: ${EXTRA_KEYSLOTS_OLD[${extra_dev}]}"
+                display_errorbox "Failed to wipe out key slots in ${luks_dev}: ${KEYSLOTS_OLD[${luks_dev}]}"
                 return 1
             fi
         fi

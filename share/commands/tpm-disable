@@ -21,7 +21,7 @@ alias cmd_requires_luks_device=true
 alias cmd_perform=cmd_tpm_disable
 
 function tpm_disable {
-    luks_dev="$1"
+    local luks_devices="$1"
 
     # Request the user to type the recovery password to prove the password is
     # correctly memorized, so that the user won't lock herself/himself out of
@@ -32,18 +32,12 @@ function tpm_disable {
 	return 1
     fi
 
-    if ! luks_verify_password "$luks_dev" "$luks_keyfile"; then
-	rm -f "$luks_keyfile"
-	display_errorbox "Failed to verify password on LUKS partition"
-	return 1
-    fi
-
-    for extra_dev in ${FDE_EXTRA_DEVS}; do
-	if ! luks_verify_password "$extra_dev" "$luks_keyfile"; then
+    for luks_dev in ${luks_devices}; do
+	if ! luks_verify_password "$luks_dev" "$luks_keyfile"; then
 	    rm -f "$luks_keyfile"
-	    display_errorbox "Failed to verify password on LUKS partition($extra_dev)"
+	    display_errorbox "Failed to verify password on LUKS partition"
 	    return 1
-        fi
+	fi
     done
 
     rm -f "$luks_keyfile"
