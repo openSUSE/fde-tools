@@ -205,23 +205,26 @@ FDE_CONFIG_DIR=/etc/fde
 . "$SHAREDIR/commands/$command"
 
 if cmd_requires_luks_device; then
-    # Merge FDE_EXTRA_DEVS into FDE_DEVS and unset FDE_EXTRA_DEVS
-    FDE_DEVS="${FDE_DEVS} ${FDE_EXTRA_DEVS}"
-    FDE_EXTRA_DEVS=""
+    if [ -n "${FDE_DEVS}" ]; then
+	luks_devices="${FDE_DEVS}"
+    else
+	fsdev=$(luks_device_for_path /)
+	if [ ! -b "$fsdev" ]; then
+	    fde_bad_argument "Unable to determine partition to operate on"
+	fi
 
-    fsdev=$(luks_device_for_path /)
-    if [ ! -b "$fsdev" ]; then
-	fde_bad_argument "Unable to determine partition to operate on"
+	luks_devices=$(luks_get_volume_for_fsdev "$fsdev")
+	if [ -z "$luks_devices" ]; then
+	    display_errorbox "Cannot find the underlying partition for $fsdev"
+	    exit 1
+	fi
+
+	# Merge FDE_EXTRA_DEVS and detected devices
+	luks_devices="${luks_devices} ${FDE_EXTRA_DEVS}"
     fi
 
-    luks_devices=$(luks_get_volume_for_fsdev "$fsdev")
-    if [ -z "$luks_devices" ]; then
-	display_errorbox "Cannot find the underlying partition for $fsdev"
-	exit 1
-    fi
-
-    # Merge FDE_DEVS and detected devices and remove duplicate devices
-    luks_devices=$(tr -s '[:space:]' '\n' <<<"${luks_devices} ${FDE_DEVS}" | sed '/^$/d' | sort -u)
+    # Remove the duplicate devices
+    luks_devices=$(tr -s '[:space:]' '\n' <<<"${luks_devices}" | sed '/^$/d' | sort -u)
 
     cmd_perform "$luks_devices"
 else
