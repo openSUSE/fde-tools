@@ -211,7 +211,7 @@ function grub_remove_keyslots {
     # TODO Avoid removing the non-grub-tpm2 keyslot or the last keyslot
 
     # Remove the keyslots
-    for slot in "${keyslots}"; do
+    for slot in ${keyslots}; do
         cryptsetup luksKillSlot -q ${luks_dev} ${slot}
     done
 
