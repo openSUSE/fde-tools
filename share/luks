@@ -234,6 +234,23 @@ function luks_verify_password {
 }
 
 ##################################################################
+# Change an existing password by files
+##################################################################
+function luks_set_password {
+    local luks_dev="$1"
+    local luks_keyfile="$2"
+    local luks_new_keyfile="$3"
+
+    display_infobox "Updating LUKS password (${luks_dev})"
+
+    if ! cryptsetup --key-file "${luks_keyfile}" luksChangeKey --pbkdf "$FDE_LUKS_PBKDF" "${luks_dev}" ${luks_new_keyfile}; then
+	# FIXME: dialog
+	fde_trace "Warning: luksChangeKey indicates failure"
+	return 1
+    fi
+}
+
+##################################################################
 # Change an existing password
 # This function uses request_new_password to prompt the user for
 # the new password.
@@ -258,13 +275,10 @@ function luks_change_password {
 	return 1
     fi
 
-    display_infobox "Updating LUKS recovery password"
-
     old_keyfile=$(luks_write_password oldpass "${luks_old_password}")
     new_keyfile=$(luks_write_password newpass "${result_password}")
-    if ! cryptsetup --key-file "${old_keyfile}" luksChangeKey --pbkdf "$FDE_LUKS_PBKDF" "${luks_dev}" ${new_keyfile}; then
-	# FIXME: dialog
-	fde_trace "Warning: luksChangeKey indicates failure"
+    if ! luks_set_password "${luks_dev}" "${old_keyfile}" "${new_keyfile}"; then
+	rm -f ${new_keyfile} ${old_keyfile}
 	return 1
     fi
 
