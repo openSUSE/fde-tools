@@ -36,6 +36,7 @@ alias bootloader_commit_config=systemd_commit_config
 alias bootloader_get_keyslots=systemd_get_keyslots
 alias bootloader_remove_keyslots=systemd_remove_keyslots
 alias bootloader_wipe=systemd_wipe
+alias bootloader_rsa_sizes=systemd_rsa_sizes
 
 
 function not_implemented {
@@ -174,4 +175,11 @@ function systemd_remove_keyslots {
 function systemd_wipe {
 
     not_implemented
+}
+
+##################################################################
+# This function lists all the supported RSA key sizes for SRK.
+##################################################################
+function systemd_rsa_sizes {
+    echo "2048"
 }

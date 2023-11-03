@@ -33,6 +33,7 @@ alias bootloader_commit_config=grub_commit_config
 alias bootloader_get_keyslots=grub_get_keyslots
 alias bootloader_remove_keyslots=grub_remove_keyslots
 alias bootloader_wipe=grub_wipe
+alias bootloader_rsa_sizes=grub_rsa_sizes
 
 ##################################################################
 # Edit a variable in /etc/default/grub
@@ -223,4 +224,22 @@ function grub_wipe {
     local luks_dev=$1
 
     grub_remove_keyslots ${luks_dev}
+}
+
+function grub_rsa_sizes {
+
+    # Check if the shim-install script supports the SRK algorithm selection.
+    if ! grep -q "GRUB_TPM2_SRK_ALG" "/usr/sbin/shim-install"; then
+	echo "2048"
+	return 0
+    fi
+
+    # Check if grub2 supports the RSA4096 SRK.
+    if grub2-protect --help | grep -q "RSA4096"; then
+	echo "4096 3072 2048"
+	return 0
+    fi
+
+    # TPM 2.0 should at least support RSA2048.
+    echo "2048"
 }

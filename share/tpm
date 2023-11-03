@@ -52,7 +52,7 @@ function tpm_set_rsa_key_size {
     fi
 
     # Find the highest supported RSA key size
-    sizes_to_test="4096 3072 2048"
+    sizes_to_test=$(bootloader_rsa_sizes)
 
     for size in ${sizes_to_test}; do
 	if pcr-oracle --rsa-bits ${size} rsa-test > /dev/null 2>&1; then
