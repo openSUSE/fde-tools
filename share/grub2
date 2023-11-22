@@ -79,11 +79,12 @@ function grub_get_fde_password {
 ##################################################################
 function grub_update_early_config {
 
-    sealed_key_file="$1"
+    local sealed_key_file="$1"
+    local rsa_key_size=$(tpm_get_rsa_key_size)
 
     grub_set_control GRUB_ENABLE_CRYPTODISK "y"
     grub_set_control GRUB_TPM2_SEALED_KEY "$sealed_key_file"
-    grub_set_control GRUB_TPM2_SRK_ALG "RSA${FDE_RSA_KEY_SIZE}"
+    grub_set_control GRUB_TPM2_SRK_ALG "RSA${rsa_key_size}"
 
     # Do not clear the password implicitly; require fdectl or
     # jeos firstboot to do so explicitly.

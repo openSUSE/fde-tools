@@ -42,13 +42,28 @@ function tpm_present_and_working {
     return 0
 }
 
-function tpm_set_rsa_key_size {
+function tpm_get_rsa_key_size {
+
+    declare -g __fde_rsa_key_size
+
+    if [ -n "$__fde_rsa_key_size" ]; then
+	echo "$__fde_rsa_key_size"
+	return
+    fi
+
+    if [ -n "$FDE_RSA_KEY_SIZE" ]; then
+	# TODO validate $FDE_RSA_KEY_SIZE
+	__fde_rsa_key_size="${FDE_RSA_KEY_SIZE}"
+	echo "$__fde_rsa_key_size"
+	return
+    fi
 
     # Check if pcr-oracle supports rsa-test
     # If pcr-oracle prints "Unknown action", fall back to default.
     if pcr-oracle rsa-test 2>&1 | grep -q "Unknown action"; then
-	fde_set_variable FDE_RSA_KEY_SIZE "2048"
-	return 0
+	__fde_rsa_key_size="2048"
+	echo "$__fde_rsa_key_size"
+	return
     fi
 
     # Find the highest supported RSA key size
@@ -56,28 +71,27 @@ function tpm_set_rsa_key_size {
 
     for size in ${sizes_to_test}; do
 	if pcr-oracle --rsa-bits ${size} rsa-test > /dev/null 2>&1; then
-	    fde_set_variable FDE_RSA_KEY_SIZE "${size}"
-	    return 0
+	    __fde_rsa_key_size="${size}"
+	    echo "$__fde_rsa_key_size"
+	    return
 	fi
     done
 
-    fde_trace "Failed to find a valid RSA key size"
-    return 1
+    fde_trace "Failed to find a valid RSA key size. Fall back to 2048"
+    __fde_rsa_key_size="2048"
+    echo "$__fde_rsa_key_size"
 }
 
 function tpm_seal_key {
 
-    secret=$1
-    sealed_secret=$2
+    local secret=$1
+    local sealed_secret=$2
 
-    tpm_set_rsa_key_size
-    if [ $? -ne 0 ]; then
-	return 1
-    fi
+    local opt_rsa_bits=
+    local rsa_size=$(tpm_get_rsa_key_size)
 
-    opt_rsa_bits=
-    if [ -n "${FDE_RSA_KEY_SIZE}" -a ${FDE_RSA_KEY_SIZE} -ne 2048 ]; then
-	opt_rsa_bits="--rsa-bits ${FDE_RSA_KEY_SIZE}"
+    if [ -n "$rsa_size" -a "$rsa_size" -ne 2048 ]; then
+	opt_rsa_bits="--rsa-bits ${rsa_size}"
     fi
 
     echo "Sealing secret against PCR policy covering $FDE_SEAL_PCR_LIST" >&2
@@ -133,13 +147,15 @@ function tpm_test {
 
 function tpm_seal_secret {
 
-    secret="$1"
-    sealed_secret="$2"
-    authorized_policy="$3"
+    local secret="$1"
+    local sealed_secret="$2"
+    local authorized_policy="$3"
 
-    opt_rsa_bits=
-    if [ -n "${FDE_RSA_KEY_SIZE}" -a ${FDE_RSA_KEY_SIZE} -ne 2048 ]; then
-	opt_rsa_bits="--rsa-bits ${FDE_RSA_KEY_SIZE}"
+    local opt_rsa_bits=
+    local rsa_size=$(tpm_get_rsa_key_size)
+
+    if [ -n "$rsa_size" -a "$rsa_size" -ne 2048 ]; then
+	opt_rsa_bits="--rsa-bits ${rsa_size}"
     fi
 
     # If we are expected to use an authorized policy, seal the secret
@@ -188,21 +204,18 @@ function tpm_set_authorized_policy_paths {
 
 function tpm_create_authorized_policy {
 
-    secret_key="$1"
-    output_policy="$2"
-    public_key="$3"
+    local secret_key="$1"
+    local output_policy="$2"
+    local public_key="$3"
 
     # Generate the private key if it does not exist
-    extra_opts=
+    local extra_opts=
     if [ ! -f "$secret_key" ]; then
-	extra_opts="--rsa-generate-key"
+	local rsa_size=$(tpm_get_rsa_key_size)
 
-	tpm_set_rsa_key_size
-        if [ $? -ne 0 ]; then
-	    return 1
-	fi
-	if [ -n "${FDE_RSA_KEY_SIZE}" -a ${FDE_RSA_KEY_SIZE} -ne 2048 ]; then
-	    extra_opts="${extra_opts} --rsa-bits ${FDE_RSA_KEY_SIZE}"
+	extra_opts="--rsa-generate-key"
+	if [ -n "$rsa_size" -a "$rsa_size" -ne 2048 ]; then
+	    extra_opts="${extra_opts} --rsa-bits ${rsa_size}"
 	fi
     fi
 
