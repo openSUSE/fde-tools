@@ -196,6 +196,7 @@ if [ -n "$opt_uefi_bootdir" ]; then
 fi
 
 FDE_CONFIG_DIR=/etc/fde
+FDE_LOG_DIR=/var/log/fde
 
 . /etc/sysconfig/fde-tools
 . "$SHAREDIR/ui/$opt_ui"

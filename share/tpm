@@ -82,6 +82,28 @@ function tpm_get_rsa_key_size {
     echo "$__fde_rsa_key_size"
 }
 
+function tpm_snapshot {
+    local snapshot="tpm-snapshot"
+    local tmpdir=$(fde_make_tempfile snapshot)
+
+    mkdir -p ${tmpdir}
+
+    pcr-oracle \
+		--from eventlog \
+		--create-testcase ${tmpdir}/${snapshot} \
+		--stop-event "$FDE_STOP_EVENT" \
+		--after \
+		predict all > /dev/null
+
+   if [ -z "$FDE_LOG_DIR" ]; then
+	FDE_LOG_DIR=/var/log/fde
+   fi
+
+   tar Jcf ${FDE_LOG_DIR}/${snapshot}.tar.xz -C ${tmpdir} ${snapshot}
+
+   rm -rf ${tmpdir}
+}
+
 function tpm_seal_key {
 
     local secret=$1
@@ -104,6 +126,8 @@ function tpm_seal_key {
 			--after \
 			seal-secret \
 			"$FDE_SEAL_PCR_LIST"
+
+    tpm_snapshot
 }
 
 function tpm_test {
@@ -256,4 +280,6 @@ function tpm_authorize {
 		--input "$sealed_key_file" \
                 --output "$signed_key_file" \
                 sign "$FDE_SEAL_PCR_LIST"
+
+    tpm_snapshot
 }

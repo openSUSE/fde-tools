@@ -7,11 +7,13 @@ LIBEXECDIR	?= /usr/libexec
 SBINDIR		?= /usr/sbin
 DATADIR		?= /usr/share
 SYSCONFDIR	?= /etc
+LOCALSTATEDIR	?= /var
 SYSCONFIGDIR	= $(SYSCONFDIR)/sysconfig
 FDE_CONFIG_DIR	= ${SYSCONFDIR}/fde
 FDE_SHARE_DIR	= $(DATADIR)/fde
 FIRSTBOOTDIR	= $(DATADIR)/jeos-firstboot
 FDE_HELPER_DIR	= $(LIBEXECDIR)/fde
+FDE_LOG_DIR	= $(LOCALSTATEDIR)/log/fde
 RPM_MACRO_DIR	= /etc/rpm
 FIDO_LINK	= -lfido2 -lcrypto
 CRPYT_LINK	= -lcryptsetup -ljson-c
@@ -74,6 +76,7 @@ install::
 	@mkdir -p $(DESTDIR)$(SBINDIR)
 	@install -m 555 -v fde.sh $(DESTDIR)$(SBINDIR)/fdectl
 	@install -m 755 -v -d $(DESTDIR)$(FDE_CONFIG_DIR)
+	@install -m 755 -v -d $(DESTDIR)$(FDE_LOG_DIR)
 
 $(SUBDIRS):
 	$(MAKE) -C $@
