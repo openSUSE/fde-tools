@@ -37,7 +37,7 @@ alias bootloader_get_keyslots=systemd_get_keyslots
 alias bootloader_remove_keyslots=systemd_remove_keyslots
 alias bootloader_wipe=systemd_wipe
 alias bootloader_rsa_sizes=systemd_rsa_sizes
-
+alias bootloader_stop_event=systemd_stop_event
 
 function not_implemented {
 
@@ -182,4 +182,12 @@ function systemd_wipe {
 ##################################################################
 function systemd_rsa_sizes {
     echo "2048"
+}
+
+##################################################################
+# This function shows the boot loader specific stop event.
+##################################################################
+function systemd_stop_event {
+
+    not_implemented
 }

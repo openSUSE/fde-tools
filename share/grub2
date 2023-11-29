@@ -34,6 +34,7 @@ alias bootloader_get_keyslots=grub_get_keyslots
 alias bootloader_remove_keyslots=grub_remove_keyslots
 alias bootloader_wipe=grub_wipe
 alias bootloader_rsa_sizes=grub_rsa_sizes
+alias bootloader_stop_event=grub_stop_event
 
 ##################################################################
 # Edit a variable in /etc/default/grub
@@ -243,4 +244,8 @@ function grub_rsa_sizes {
 
     # TPM 2.0 should at least support RSA2048.
     echo "2048"
+}
+
+function grub_stop_event {
+    echo "grub-file=grub.cfg"
 }

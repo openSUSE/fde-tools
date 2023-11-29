@@ -19,10 +19,6 @@
 
 FDE_DEFAULT_AUTHORIZED_POLICY="authorized-policy"
 
-# FIXME: this needs work for boot loaders other than grub
-# Maybe we should introduce a bootloader_stop_event() function.
-FDE_STOP_EVENT="grub-file=grub.cfg"
-
 ##################################################################
 # Check whether a TPM is present and working reasonably well
 ##################################################################
@@ -88,10 +84,12 @@ function tpm_snapshot {
 
     mkdir -p ${tmpdir}
 
+    local stop_event=$(bootloader_stop_event)
+
     pcr-oracle \
 		--from eventlog \
 		--create-testcase ${tmpdir}/${snapshot} \
-		--stop-event "$FDE_STOP_EVENT" \
+		--stop-event "$stop_event" \
 		--after \
 		predict all > /dev/null
 
@@ -116,13 +114,15 @@ function tpm_seal_key {
 	opt_rsa_bits="--rsa-bits ${rsa_size}"
     fi
 
+    local stop_event=$(bootloader_stop_event)
+
     echo "Sealing secret against PCR policy covering $FDE_SEAL_PCR_LIST" >&2
     pcr-oracle ${opt_rsa_bits} \
 			--input "$secret" --output "$sealed_secret" \
 			--key-format tpm2.0 \
 			--algorithm "$FDE_SEAL_PCR_BANK" \
 			--from eventlog \
-			--stop-event "$FDE_STOP_EVENT" \
+			--stop-event "$stop_event" \
 			--after \
 			seal-secret \
 			"$FDE_SEAL_PCR_LIST"
@@ -266,16 +266,18 @@ function tpm_create_authorized_policy {
 
 function tpm_authorize {
 
-    private_key_file="$1"
-    sealed_key_file="$2"
-    signed_key_file="$3"
+    local private_key_file="$1"
+    local sealed_key_file="$2"
+    local signed_key_file="$3"
+
+    local stop_event=$(bootloader_stop_event)
 
     pcr-oracle \
 		--key-format tpm2.0 \
 		--algorithm "$FDE_SEAL_PCR_BANK" \
                 --private-key "$private_key_file" \
                 --from eventlog \
-		--stop-event "$FDE_STOP_EVENT" \
+		--stop-event "$stop_event" \
 		--after \
 		--input "$sealed_key_file" \
                 --output "$signed_key_file" \
