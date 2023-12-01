@@ -102,6 +102,36 @@ function tpm_snapshot {
    rm -rf ${tmpdir}
 }
 
+function tpm_inspect {
+    local snapshot="tpm-snapshot"
+    local snapshot_file="${FDE_LOG_DIR}/${snapshot}.tar.xz"
+    local tmpdir=$(fde_make_tempfile inspect)
+
+    # FIXME use bootloader specific snapshot
+    local grubsnapshot="/sys/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
+
+    if [ ! -r ${grubsnapshot} -o ! -r ${snapshot_file} ]; then
+	fde_trace "snapshot not available"
+	return 1
+    fi
+
+    mkdir -p ${tmpdir}
+
+    tar xf ${snapshot_file} -C ${tmpdir}
+
+    local stop_event=$(bootloader_stop_event)
+
+    pcr-oracle \
+		--from eventlog \
+		--verify snapshot \
+		--replay-testcase ${tmpdir}/${snapshot} \
+		--stop-event "$stop_event" \
+		--after \
+		predict ${FDE_SEAL_PCR_LIST}
+
+   rm -rf ${tmpdir}
+}
+
 function tpm_seal_key {
 
     local secret=$1
