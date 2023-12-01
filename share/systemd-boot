@@ -38,6 +38,7 @@ alias bootloader_remove_keyslots=systemd_remove_keyslots
 alias bootloader_wipe=systemd_wipe
 alias bootloader_rsa_sizes=systemd_rsa_sizes
 alias bootloader_stop_event=systemd_stop_event
+alias bootloader_platform_parameters=systemd_platform_parameters
 
 function not_implemented {
 
@@ -190,4 +191,13 @@ function systemd_rsa_sizes {
 function systemd_stop_event {
 
     not_implemented
+}
+
+##################################################################
+# This function shows the boot loader specific parameters for
+# pcr-oracle.
+##################################################################
+function systemd_platform_parameters {
+
+    echo "--target-platform systemd"
 }

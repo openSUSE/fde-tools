@@ -132,24 +132,42 @@ function tpm_inspect {
    rm -rf ${tmpdir}
 }
 
+function tpm_platform_parameters {
+    declare -g __fde_platform_param
+
+    if [ -n "$__fde_platform_param" ]; then
+	echo "$__fde_platform_param"
+	return
+    fi
+
+    # Check if pcr-oracle supports "--target-platform"
+    if pcr-oracle --target-platform 2>&1 | grep -q "unrecognized option"; then
+	__fde_platform_param="--key-format tpm2.0"
+	echo "$__fde_platform_param"
+	return
+    fi
+
+    __fde_platform_param=$(bootloader_platform_parameters)
+    echo "$__fde_platform_param"
+}
+
 function tpm_seal_key {
 
     local secret=$1
     local sealed_secret=$2
 
-    local opt_rsa_bits=
+    local extra_opts=$(tpm_platform_parameters)
     local rsa_size=$(tpm_get_rsa_key_size)
 
     if [ -n "$rsa_size" -a "$rsa_size" -ne 2048 ]; then
-	opt_rsa_bits="--rsa-bits ${rsa_size}"
+	extra_opts="${extra_opts} --rsa-bits ${rsa_size}"
     fi
 
     local stop_event=$(bootloader_stop_event)
 
     echo "Sealing secret against PCR policy covering $FDE_SEAL_PCR_LIST" >&2
-    pcr-oracle ${opt_rsa_bits} \
+    pcr-oracle ${extra_opts} \
 			--input "$secret" --output "$sealed_secret" \
-			--key-format tpm2.0 \
 			--algorithm "$FDE_SEAL_PCR_BANK" \
 			--from eventlog \
 			--stop-event "$stop_event" \
@@ -205,19 +223,18 @@ function tpm_seal_secret {
     local sealed_secret="$2"
     local authorized_policy="$3"
 
-    local opt_rsa_bits=
+    local extra_opts=$(tpm_platform_parameters)
     local rsa_size=$(tpm_get_rsa_key_size)
 
     if [ -n "$rsa_size" -a "$rsa_size" -ne 2048 ]; then
-	opt_rsa_bits="--rsa-bits ${rsa_size}"
+	extra_opts="${extra_opts} --rsa-bits ${rsa_size}"
     fi
 
     # If we are expected to use an authorized policy, seal the secret
     # against that, using pcr-oracle rather than the tpm2 tools
     if [ -n "$authorized_policy" ]; then
-	pcr-oracle ${opt_rsa_bits} \
+	pcr-oracle ${extra_opts} \
 			--authorized-policy "$authorized_policy" \
-			--key-format tpm2.0 \
 			--input $secret \
 			--output $sealed_secret \
 			seal-secret
@@ -300,10 +317,10 @@ function tpm_authorize {
     local sealed_key_file="$2"
     local signed_key_file="$3"
 
+    local extra_opts=$(tpm_platform_parameters)
     local stop_event=$(bootloader_stop_event)
 
-    pcr-oracle \
-		--key-format tpm2.0 \
+    pcr-oracle ${extra_opts} \
 		--algorithm "$FDE_SEAL_PCR_BANK" \
                 --private-key "$private_key_file" \
                 --from eventlog \

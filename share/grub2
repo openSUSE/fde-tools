@@ -35,6 +35,7 @@ alias bootloader_remove_keyslots=grub_remove_keyslots
 alias bootloader_wipe=grub_wipe
 alias bootloader_rsa_sizes=grub_rsa_sizes
 alias bootloader_stop_event=grub_stop_event
+alias bootloader_platform_parameters=grub_platform_parameters
 
 ##################################################################
 # Edit a variable in /etc/default/grub
@@ -248,4 +249,8 @@ function grub_rsa_sizes {
 
 function grub_stop_event {
     echo "grub-file=grub.cfg"
+}
+
+function grub_platform_parameters {
+    echo "--target-platform tpm2.0"
 }
