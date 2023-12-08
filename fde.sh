@@ -76,6 +76,7 @@ Commands:
   tpm-disable	disable TPM protection
   tpm-wipe	wipe out the keyslot for the sealed key
   tpm-authorize		update the authorized pcr policy in the sealed key
+  tpm-inspect   check the pcr policy of the sealed key
 EOF
 }
 
