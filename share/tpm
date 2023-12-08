@@ -18,6 +18,7 @@
 #   Written by Olaf Kirch <okir@suse.com>
 
 FDE_DEFAULT_AUTHORIZED_POLICY="authorized-policy"
+FDE_SNAPSHOT_NAME="tpm-snapshot"
 
 ##################################################################
 # Check whether a TPM is present and working reasonably well
@@ -79,7 +80,8 @@ function tpm_get_rsa_key_size {
 }
 
 function tpm_snapshot {
-    local snapshot="tpm-snapshot"
+    # TODO Add an ID to the snapshot name
+    local snapshot=${FDE_SNAPSHOT_NAME}
     local tmpdir=$(fde_make_tempfile snapshot)
 
     mkdir -p ${tmpdir}
@@ -102,15 +104,50 @@ function tpm_snapshot {
 	mkdir -p "$FDE_LOG_DIR"
     fi
 
+    cp /proc/sys/kernel/random/boot_id ${tmpdir}/${snapshot}/boot_id
+
     tar Jcf ${FDE_LOG_DIR}/${snapshot}.tar.xz -C ${tmpdir} ${snapshot}
 
     rm -rf ${tmpdir}
 }
 
+function tpm_pcr_usage {
+    local pcr=$1
+
+    # References:
+    # https://uapi-group.org/specifications/specs/linux_tpm_pcr_registry/
+    # https://tianocore-docs.github.io/edk2-TrustedBootChain/release-1.00/3_TCG_Trusted_Boot_Chain_in_EDKII.html
+    declare -A pcr_usage_strs
+    pcr_usage_strs["0"]="[UEFI] Core system firmware executable code"
+    pcr_usage_strs["1"]="[UEFI] Core system firmware data/host platform configuration"
+    pcr_usage_strs["2"]="[UEFI] Extended or pluggable executable code"
+    pcr_usage_strs["3"]="[UEFI] Extended or pluggable firmware data"
+    pcr_usage_strs["4"]="[UEFI,shim,GRUB2,systemd] Boot loader and additional drivers"
+    pcr_usage_strs["5"]="[UEFI] GPT/Partition table"
+    pcr_usage_strs["6"]="[UEFI] Host Platform Manufacturer Specific"
+    pcr_usage_strs["7"]="[UEFI] Secure Boot Policy"
+    pcr_usage_strs["8"]="[GRUB2] Commands and kernel command line"
+    pcr_usage_strs["9"]="[GRUB2] All files read (grub.cfg, kernel, initrd)"
+    pcr_usage_strs["10"]="[IMA] Protection of the IMA measurement log"
+    pcr_usage_strs["11"]="[systemd] All components of unified kernel images"
+    pcr_usage_strs["12"]="[systemd] Kernel command line, system credentials and system configuration images"
+    pcr_usage_strs["13"]="[systemd] All system extension images for the initrd"
+    pcr_usage_strs["14"]="[shim] MOK certificates and hashes"
+
+    echo "${pcr_usage_strs[${pcr}]}"
+}
+
 function tpm_inspect {
-    local snapshot="tpm-snapshot"
+    # TODO Add an ID to the snapshot name
+    local snapshot=${FDE_SNAPSHOT_NAME}
     local snapshot_file="${FDE_LOG_DIR}/${snapshot}.tar.xz"
     local tmpdir=$(fde_make_tempfile inspect)
+    local stop_event=$(bootloader_stop_event)
+    local sys_boot_id="/proc/sys/kernel/random/boot_id"
+    local pcr_out
+    local pcr_list
+    local mismatch_lines
+    local ret
 
     # FIXME use bootloader specific snapshot
     local grubsnapshot="/sys/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
@@ -124,17 +161,65 @@ function tpm_inspect {
 
     tar xf ${snapshot_file} -C ${tmpdir}
 
-    local stop_event=$(bootloader_stop_event)
-
-    pcr-oracle \
+    pcr_out=$(pcr-oracle \
 		--from eventlog \
 		--verify snapshot \
 		--replay-testcase ${tmpdir}/${snapshot} \
-		--stop-event "$stop_event" \
+		--stop-event "${stop_event}" \
 		--after \
-		predict ${FDE_SEAL_PCR_LIST}
+		predict ${FDE_SEAL_PCR_LIST} 2>&1)
+    ret=$?
+
+    if [ $ret -eq 0 ]; then
+	echo "Sealed PCR matching the current settings"
+	rm -rf ${tmpdir}
+	return 0
+    fi
+
+    # Check the errors from pcr-oracle
+
+    # Interpret the pcr-oracle output
+    mismatch_lines=$(grep MISMATCH <<<${pcr_out})
+    if [ -z "$mismatch_lines" ]; then
+	fde_trace "$pcr_out"
+	rm -rf ${tmpdir}
+	return 1
+    fi
+    pcr_list=$(echo ${mismatch_lines} | cut -d' ' -f 1 | cut -d':' -f 2)
+
+    # Check the boot ID and see if the predicted PCR values are for the next
+    # boot or not.
+    if diff ${tmpdir}/${snapshot}/boot_id ${sys_boot_id} > /dev/null; then
+	echo "Sealed key authorized for the next boot"
+	rm -rf ${tmpdir}
+	return 0
+    fi
+
+    fde_trace "PCR mismatch detected:"
+    for pcr in ${pcr_list}; do
+	fde_trace "* PCR ${pcr}: $(tpm_pcr_usage ${pcr})"
+    done
+
+    # Check if pcr-oracle support '--compare-current'.
+    if pcr-oracle --compare-current 2>&1 | grep -q "unrecognized option"; then
+	return 1
+    fi
+
+    fde_trace ""
+    fde_trace ""
+
+    # List the detailed TPM events of the affected PCR
+    pcr_out=$(pcr-oracle -d \
+		--from eventlog \
+		--replay-testcase ${tmpdir}/${snapshot} \
+		--compare-current \
+		--stop-event "${stop_event}" \
+		--after \
+		predict $(echo ${pcr_list} | paste -s -d ',') 2>&1)
+    fde_trace ${pcr_out}
 
     rm -rf ${tmpdir}
+    return 1
 }
 
 function tpm_platform_parameters {
