@@ -1,4 +1,4 @@
-%fde_tpm_update_requires Requires(posttrans): fde-tpm-helper
+%fde_tpm_update_requires Requires(posttrans): (fde-tpm-helper if fde-tools)
 
 %fde_tpm_update_post() \
 mkdir -p %{_rundir}/fde-tpm-helper/ \
