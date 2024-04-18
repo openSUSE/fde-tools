@@ -228,7 +228,7 @@ function fde_choose_protection {
 
     FDE_PROTECTION=""
 
-    message="ALP can be installed with an encrypted root and boot partition. Please choose the desired protection method(s) or press Cancel to install without encryption"
+    message="This system can be installed with an encrypted root and boot partition. Please choose the desired protection method(s) or press Cancel to install without encryption"
     options+=(pass 'Pass phrase' on)
 
     if ! tpm_present_and_working; then
