@@ -237,7 +237,8 @@ function fde_choose_protection {
     	options+=(tpm 'Stored inside the TPM chip' on)
     fi
 
-    options+=(ccid 'Stored inside a CCID capable token' off)
+    # Disable the ccid option until we really implement it
+    # options+=(ccid 'Stored inside a CCID capable token' off)
 
     while true; do
         d --title "Full Disk Encryption" --checklist \
