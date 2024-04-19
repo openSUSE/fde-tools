@@ -182,6 +182,8 @@ function tpm_test {
 
     key_size=$1
 
+    local extra_opts=$(tpm_platform_parameters)
+
     secret=$(fde_make_tempfile secret)
     dd if=/dev/zero of=$secret bs=$key_size count=1 status=none >&2
 
@@ -193,18 +195,18 @@ function tpm_test {
     dd if=/dev/zero of=$secret bs=$key_size count=1 status=none >&2
 
     fde_trace "Testing TPM seal/unseal"
-    pcr-oracle \
+    pcr-oracle ${extra_opts} \
 	--algorithm "$FDE_SEAL_PCR_BANK" \
         --input "$secret" \
         --output "$sealed_secret" \
         --from current \
         seal-secret "$FDE_SEAL_PCR_LIST"
 
-    pcr-oracle \
+    pcr-oracle ${extra_opts} \
 	--algorithm "$FDE_SEAL_PCR_BANK" \
         --input "$sealed_secret" \
         --output "$recovered" \
-        unseal-secret "$FDE_SEAL_PCR_LIST"
+        unseal-secret
 
     if ! cmp "$secret" "$recovered"; then
         fde_trace "BAD: Unable to recover original secret"
