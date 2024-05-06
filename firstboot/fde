@@ -203,14 +203,21 @@ function fde_setup_unencrypted {
 
 function __fde_valid_protections {
 
+    pass_warn=true
     for tag in $*; do
         case $tag in
-        pass|tpm) : ;;
+        pass) pass_warn=false ;;
+        tpm) : ;;
         *)
 	    display_errorbox "FDE key protection scheme $tag not yet implemented"
 	    return 1;;
         esac
     done
+
+    if $pass_warn; then
+        display_errorbox "Pass phrase is mandatory"
+        return 1
+    fi
 
     return 0
 }
@@ -252,10 +259,6 @@ function fde_choose_protection {
 
 	FDE_PROTECTION="$result"
 	fde_trace "user selected protections: <$FDE_PROTECTION>"
-
-	if [ -z "$FDE_PROTECTION" ]; then
-	    return 1
-	fi
 
 	if __fde_valid_protections $FDE_PROTECTION; then
 	    break
