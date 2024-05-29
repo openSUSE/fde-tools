@@ -239,7 +239,9 @@ function fde_choose_protection {
     options+=(pass 'Pass phrase' on)
 
     if ! tpm_present_and_working; then
-	display_infobox "This system does not seem to have a working TPM device."
+	display_errorbox "This system does not seem to have a working TPM device."
+    elif ! uefi_secure_boot_enabled; then
+	display_errorbox "This system does not seem to use Secure Boot. Full disk encryption with TPM2 disabled"
     else
     	options+=(tpm 'Stored inside the TPM chip' on)
     fi
@@ -282,11 +284,6 @@ function fde_firstboot {
 }
 
 function fde_systemd_firstboot {
-
-    if ! uefi_secure_boot_enabled; then
-	display_infobox "This system does not seem to use Secure Boot. Full disk encryption not available"
-	return 1
-    fi
 
     display_infobox "Full Disk Encryption with TPM2 support"
 
