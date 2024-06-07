@@ -1,16 +1,20 @@
 %fde_tpm_update_requires Requires(posttrans): (fde-tpm-helper if fde-tools)
 
 %fde_tpm_update_post() \
-mkdir -p %{_rundir}/fde-tpm-helper/ \
-touch %{_rundir}/fde-tpm-helper/update \
-for bl in %{?*}; do \
-  echo ${bl} >> %{_rundir}/fde-tpm-helper/update \
-done \
+if test -x %{_libexecdir}/fde/fde-tpm-helper; then \
+  mkdir -p %{_rundir}/fde-tpm-helper/ \
+  touch %{_rundir}/fde-tpm-helper/update \
+  for bl in %{?*}; do \
+    echo ${bl} >> %{_rundir}/fde-tpm-helper/update \
+  done \
+fi \
 %nil
 
 %fde_tpm_update_posttrans() \
-if test -f %{_rundir}/fde-tpm-helper/update; then \
-  %{_libexecdir}/fde/fde-tpm-helper "`cat %{_rundir}/fde-tpm-helper/update | uniq`" || : \
-  rm -f %{_rundir}/fde-tpm-helper/update \
+if test -x %{_libexecdir}/fde/fde-tpm-helper; then \
+  if test -f %{_rundir}/fde-tpm-helper/update; then \
+    %{_libexecdir}/fde/fde-tpm-helper "`cat %{_rundir}/fde-tpm-helper/update | uniq`" || : \
+    rm -f %{_rundir}/fde-tpm-helper/update \
+  fi \
 fi \
 %nil
