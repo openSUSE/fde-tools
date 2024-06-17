@@ -93,18 +93,18 @@ function tpm_snapshot {
 		--after \
 		predict all > /dev/null
 
-   if [ -z "$FDE_LOG_DIR" ]; then
+    if [ -z "$FDE_LOG_DIR" ]; then
 	FDE_LOG_DIR=/var/log/fde
-   fi
+    fi
 
-   # Try to create the log directory
-   if [ ! -d "$FDE_LOG_DIR" ]; then
+    # Try to create the log directory
+    if [ ! -d "$FDE_LOG_DIR" ]; then
 	mkdir -p "$FDE_LOG_DIR"
-   fi
+    fi
 
-   tar Jcf ${FDE_LOG_DIR}/${snapshot}.tar.xz -C ${tmpdir} ${snapshot}
+    tar Jcf ${FDE_LOG_DIR}/${snapshot}.tar.xz -C ${tmpdir} ${snapshot}
 
-   rm -rf ${tmpdir}
+    rm -rf ${tmpdir}
 }
 
 function tpm_inspect {
@@ -134,7 +134,7 @@ function tpm_inspect {
 		--after \
 		predict ${FDE_SEAL_PCR_LIST}
 
-   rm -rf ${tmpdir}
+    rm -rf ${tmpdir}
 }
 
 function tpm_platform_parameters {
