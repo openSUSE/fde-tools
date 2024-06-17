@@ -88,13 +88,6 @@ function tpm_snapshot {
 
     local stop_event=$(bootloader_stop_event)
 
-    pcr-oracle \
-		--from eventlog \
-		--create-testcase ${tmpdir}/${snapshot} \
-		--stop-event "$stop_event" \
-		--after \
-		predict all > /dev/null
-
     if [ -z "$FDE_LOG_DIR" ]; then
 	FDE_LOG_DIR=/var/log/fde
     fi
@@ -103,6 +96,13 @@ function tpm_snapshot {
     if [ ! -d "$FDE_LOG_DIR" ]; then
 	mkdir -p "$FDE_LOG_DIR"
     fi
+
+    pcr-oracle \
+		--from eventlog \
+		--create-testcase ${tmpdir}/${snapshot} \
+		--stop-event "$stop_event" \
+		--after \
+		predict "$FDE_SEAL_PCR_LIST" > ${tmpdir}/${snapshot}/predicted-pcr.txt
 
     cp /proc/sys/kernel/random/boot_id ${tmpdir}/${snapshot}/boot_id
 
