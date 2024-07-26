@@ -112,6 +112,11 @@ function fde_setup_encrypted {
 	    return 1
 	fi
 	rm -f "${luks_keyfile}"
+
+	# Replace the key file path in /etc/crypttab with "/.virtual-root.key"
+	# to avoid errors when unmounting the LUKS partition (bsc#1218181)
+	sed -i "s,${luks_keyfile},/.virtual-root.key,g" /etc/crypttab
+
 	luks_keyfile=""
     fi
 
@@ -152,11 +157,12 @@ function fde_setup_encrypted {
     # Remove the password file
     rm -f ${pass_keyfile}
 
-    # Update /boot/grub2/grub.cfg
+    # Update initrd and /boot/grub2/grub.cfg
     if test -d "/boot/writable"; then
-	transactional-update grub.cfg
+	transactional-update initrd grub.cfg
 	transactional-update apply
     else
+	dracut -f
 	grub2-mkconfig -o /boot/grub2/grub.cfg
     fi
 
