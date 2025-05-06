@@ -37,6 +37,7 @@ fi
 # Values and locations used by KIWI
 ##################################################################
 KIWI_ROOT_KEYFILE=/root/.root.keyfile
+KIWI_REENCRYPTION_KEYFILE=/run/.kiwi_reencrypt.keyfile
 
 ##################################################################
 # Aliases are not expanded in non-interactive mode.
@@ -86,6 +87,8 @@ function fde_setup_encrypted {
     with_tpm=false
     with_ccid=false
 
+    is_reencrypted=false
+
     for method in $FDE_PROTECTION; do
 	case $method in
 	pass) with_pass=true;;
@@ -111,6 +114,20 @@ function fde_setup_encrypted {
 	return 1
     fi
 
+    # KIWI may save sha256sum of the LUKS header in initrd before reencrypting
+    # the root partition. If the checksum differs from the one of the current
+    # LUKS header, the root partition is already reencryted.
+    luks_hdr_sum_kiwi="`lsinitrd --file root/.luks.header /boot/initrd`"
+    if [ "${luks_hdr_sum_kiwi}" != "" ]; then
+	cryptsetup luksHeaderBackup ${luks_dev} --header-backup-file /root/.luks.header
+	luks_hdr_sum_cur="`sha256sum /root/.luks.header | cut -f1 -d' '`"
+	rm -f /root/.luks.header
+
+	if [ "${luks_hdr_sum_cur}" != "${luks_hdr_sum_kiwi}" ]; then
+	    is_reencrypted=true
+	fi
+    fi
+
     luks_current_password="${luks_recovery_pass}"
 
     # Check if the installer/imager has created a secondary slot that is protected
@@ -119,10 +136,14 @@ function fde_setup_encrypted {
     # header that has more than one valid key slot. To avoid any ugly gymnastics,
     # simply drop that slot.
     if [ -n "$luks_keyfile" ]; then
-	if ! luks_drop_key "${luks_dev}" "${luks_keyfile}"; then
-	    display_errorbox "Failed to remove initial random key"
-	    return 1
+	# Skip luks_drop_key if the partition is already reencrypted
+	if [ "$is_reencrypted" == "false" ]; then
+	    if ! luks_drop_key "${luks_dev}" "${luks_keyfile}"; then
+		display_errorbox "Failed to remove initial random key"
+		return 1
+	    fi
 	fi
+
 	rm -f "${luks_keyfile}"
 
 	# Replace the key file path in /etc/crypttab with "/.virtual-root.key"
@@ -144,11 +165,15 @@ function fde_setup_encrypted {
 	fi
     fi
 
+    # Write the current password to a file for the later operations
+    pass_keyfile=$(luks_write_password pass "${luks_current_password}")
+
     # Reencrypt with the new password
     # FIXME: only do this if the LUKS master key is well-known, eg when dealing with
     # a VM image.
-    pass_keyfile=$(luks_write_password pass "${luks_current_password}")
-    luks_reencrypt "${luks_dev}" "${pass_keyfile}"
+    if [ "$is_reencrypted" = "false" ]; then
+        luks_reencrypt "${luks_dev}" "${pass_keyfile}"
+    fi
 
     if $with_tpm; then
 	if ! fdectl regenerate-key --passfile "${pass_keyfile}"; then
@@ -308,8 +333,14 @@ function fde_systemd_firstboot {
     # Redirect the fde_trace messages from stderr to journald
     exec 2> >(systemd-cat -t fde-tools -p info)
 
-    # Get the password that was used during installation.
-    fde_root_passphrase=$(bootloader_get_fde_password)
+    if [ -f "$KIWI_REENCRYPTION_KEYFILE" ]; then
+        # Use the reencryption password from KIWI
+        fde_root_passphrase="$(<${KIWI_REENCRYPTION_KEYFILE})"
+    else
+	# Try the default password
+	fde_root_passphrase=$(bootloader_get_fde_password)
+    fi
+
     if [ -z "$fde_root_passphrase" ]; then
 	display_errorbox "Cannot find the initial FDE password for the root file system"
 	return 1
@@ -319,8 +350,6 @@ function fde_systemd_firstboot {
 	KIWI_ROOT_KEYFILE=""
     fi
 
-    # FIXME: rather than hard-coding the recovery password here,
-    # have kiwi write it to /.root.something and read it from there
     fde_firstboot $(luks_device_for_path "/") "$KIWI_ROOT_KEYFILE" "$fde_root_passphrase"
 
     fde_clean_tempdir
