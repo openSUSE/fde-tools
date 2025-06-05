@@ -146,6 +146,9 @@ function fde_setup_encrypted {
 
 	rm -f "${luks_keyfile}"
 
+	# Remove the dracut conf for the key file
+	rm -f /etc/dracut.conf.d/99-luks-boot.conf
+
 	# Replace the key file path in /etc/crypttab with "/.virtual-root.key"
 	# to avoid errors when unmounting the LUKS partition (bsc#1218181)
 	sed -i "s,${luks_keyfile},/.virtual-root.key,g" /etc/crypttab
