@@ -114,10 +114,14 @@ function fde_setup_encrypted {
 	return 1
     fi
 
+    # bsc#1244323 lsinitrd may not be able to deal with the symlink properly.
+    # To avoid the potential error, always use the real path to the initrd.
+    sys_initrd="`readlink -f /boot/initrd`"
+
     # KIWI may save sha256sum of the LUKS header in initrd before reencrypting
     # the root partition. If the checksum differs from the one of the current
     # LUKS header, the root partition is already reencryted.
-    luks_hdr_sum_kiwi="`lsinitrd --file root/.luks.header /boot/initrd`"
+    luks_hdr_sum_kiwi="`lsinitrd --file root/.luks.header ${sys_initrd}`"
     if [ "${luks_hdr_sum_kiwi}" != "" ]; then
 	cryptsetup luksHeaderBackup ${luks_dev} --header-backup-file /root/.luks.header
 	luks_hdr_sum_cur="`sha256sum /root/.luks.header | cut -f1 -d' '`"
