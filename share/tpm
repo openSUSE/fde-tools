@@ -97,6 +97,11 @@ function tpm_snapshot {
 	FDE_LOG_DIR=/var/log/fde
    fi
 
+   # Try to create the log directory
+   if [ ! -d "$FDE_LOG_DIR" ]; then
+	mkdir -p "$FDE_LOG_DIR"
+   fi
+
    tar Jcf ${FDE_LOG_DIR}/${snapshot}.tar.xz -C ${tmpdir} ${snapshot}
 
    rm -rf ${tmpdir}
