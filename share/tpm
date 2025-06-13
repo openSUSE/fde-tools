@@ -102,8 +102,9 @@ function tpm_snapshot {
 		--create-testcase ${tmpdir}/${snapshot} \
 		--stop-event "$stop_event" \
 		--after \
-		predict "$FDE_SEAL_PCR_LIST" > ${tmpdir}/${snapshot}/predicted-pcr.txt
+		predict "$FDE_SEAL_PCR_LIST" > ${tmpdir}/predicted-pcr.txt
 
+    mv ${tmpdir}/predicted-pcr.txt ${tmpdir}/${snapshot}/predicted-pcr.txt
     cp /proc/sys/kernel/random/boot_id ${tmpdir}/${snapshot}/boot_id
 
     tar Jcf ${FDE_LOG_DIR}/${snapshot}.tar.xz -C ${tmpdir} ${snapshot}
