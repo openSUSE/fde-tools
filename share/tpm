@@ -92,9 +92,9 @@ function tpm_snapshot {
 	FDE_LOG_DIR=/var/log/fde
     fi
 
-    # Try to create the log directory
     if [ ! -d "$FDE_LOG_DIR" ]; then
-	mkdir -p "$FDE_LOG_DIR"
+	fde_trace "${FDE_LOG_DIR} doesn't exist. Skip snapshot creation"
+	return 0
     fi
 
     pcr-oracle \
