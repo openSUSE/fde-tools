@@ -217,7 +217,7 @@ function tpm_inspect {
 		--stop-event "${stop_event}" \
 		--after \
 		predict $(echo ${pcr_list} | paste -s -d ',') 2>&1)
-    fde_trace ${pcr_out}
+    fde_trace "${pcr_out}"
 
     rm -rf ${tmpdir}
     return 1
