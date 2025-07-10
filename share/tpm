@@ -201,13 +201,19 @@ function tpm_inspect {
 	fde_trace "* PCR ${pcr}: $(tpm_pcr_usage ${pcr})"
     done
 
+    # FIXME Stop here until "pcr-oracle --compare-current" can handle PCR7
+    # events without specifying PCR4 in the list
+    return 0
+
     # Check if pcr-oracle support '--compare-current'.
     if pcr-oracle --compare-current 2>&1 | grep -q "unrecognized option"; then
-	return 1
+	return 0
     fi
 
     fde_trace ""
     fde_trace ""
+
+    # FIXME SBAT event in PCR7 needs PCR4 to locate the EFI binary.
 
     # List the detailed TPM events of the affected PCR
     pcr_out=$(pcr-oracle -d \
@@ -220,7 +226,7 @@ function tpm_inspect {
     fde_trace "${pcr_out}"
 
     rm -rf ${tmpdir}
-    return 1
+    return 0
 }
 
 function tpm_platform_parameters {
