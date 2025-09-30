@@ -284,24 +284,42 @@ function tpm_test {
     secret=$(fde_make_tempfile secret)
     dd if=/dev/zero of=$secret bs=$key_size count=1 status=none >&2
 
-    secret=$(fde_make_tempfile secret)
     sealed_secret=$(fde_make_tempfile sealed_secret)
+    signed_secret=$(fde_make_tempfile signed_secret)
     recovered=$(fde_make_tempfile recovered)
+
+    rsa_privkey=$(fde_make_tempfile rsa_privkey)
+    auth_policy=$(fde_make_tempfile auth_policy)
+
     result=1
 
-    dd if=/dev/zero of=$secret bs=$key_size count=1 status=none >&2
-
     fde_trace "Testing TPM seal/unseal"
+
+    pcr-oracle \
+	--rsa-generate-key \
+	--private-key "$rsa_privkey" \
+	--auth "$auth_policy" \
+	--algorithm $FDE_SEAL_PCR_BANK \
+	create-authorized-policy "$FDE_SEAL_PCR_LIST"
+
     pcr-oracle ${extra_opts} \
-	--algorithm "$FDE_SEAL_PCR_BANK" \
-        --input "$secret" \
-        --output "$sealed_secret" \
-        --from current \
-        seal-secret "$FDE_SEAL_PCR_LIST"
+	--auth "$auth_policy" \
+	--input "$secret" \
+	--output "$sealed_secret" \
+	seal-secret
 
     pcr-oracle ${extra_opts} \
 	--algorithm "$FDE_SEAL_PCR_BANK" \
-        --input "$sealed_secret" \
+	--policy-name "authorized-policy-test" \
+	--private-key "$rsa_privkey" \
+	--from current \
+	--input "$sealed_secret" \
+	--output "$signed_secret" \
+	sign "$FDE_SEAL_PCR_LIST"
+
+    pcr-oracle ${extra_opts} \
+	--algorithm "$FDE_SEAL_PCR_BANK" \
+        --input "$signed_secret" \
         --output "$recovered" \
         unseal-secret
 
