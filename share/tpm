@@ -208,7 +208,7 @@ function tpm_inspect {
 
     tar xf ${snapshot_file} -C ${tmpdir}
 
-    pcr_out=$(pcr-oracle \
+    pcr_out=$(LC_ALL=C pcr-oracle \
 		--from eventlog \
 		--verify snapshot \
 		--replay-testcase ${tmpdir}/${snapshot} \

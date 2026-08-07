@@ -31,7 +31,7 @@ function uefi_secure_boot_enabled {
 	return 1
     fi
 
-    if ! mokutil --sb-state 2> /dev/null | grep -q "enabled" ; then
+    if ! LC_ALL=C mokutil --sb-state 2> /dev/null | grep -q "enabled" ; then
 	fde_trace "Secure Boot not enabled"
 	return 1
     fi
@@ -48,13 +48,13 @@ function uefi_set_loader {
 
 function uefi_get_current_loader {
 
-    entry=$(efibootmgr | grep BootCurrent|awk '{print $2;}')
+    entry=$(LC_ALL=C efibootmgr | grep BootCurrent|awk '{print $2;}')
     if [ -z "$entry" ]; then
 	fde_trace "Cannot determine current UEFI boot entry"
 	return 1
     fi
 
-    file=$(efibootdump "Boot$entry" | sed 's/.*File(\([^)]*\)).*/\1/;t;d' | tr '\\' /)
+    file=$(LC_ALL=C efibootdump "Boot$entry" | sed 's/.*File(\([^)]*\)).*/\1/;t;d' | tr '\\' /)
 
     # Some boot setups do not use an EFI path with a file component.
     #

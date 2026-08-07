@@ -241,7 +241,7 @@ function grub_rsa_sizes {
     fi
 
     # Check if grub2 supports the RSA4096 SRK.
-    if grub2-protect --help | grep -q "RSA4096"; then
+    if LC_ALL=C grub2-protect --help | grep -q "RSA4096"; then
 	echo "4096 3072 2048"
 	return 0
     fi

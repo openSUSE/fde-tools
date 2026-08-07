@@ -327,7 +327,7 @@ function luks_add_key {
     # Note: we try to reduce the cost of PBKDF to (almost) nothing.
     # There's no need in slowing down this operation for a
     # key that was random to begin with.
-    luks_output=$(cryptsetup --verbose --key-file "${luks_keyfile}" luksAddKey \
+    luks_output=$(LC_ALL=C cryptsetup --verbose --key-file "${luks_keyfile}" luksAddKey \
 		  --pbkdf "$FDE_LUKS_PBKDF" --pbkdf-force-iterations 1000 \
 		  ${luks_dev} ${new_keyfile})
     if test $? -ne 0; then
@@ -395,7 +395,7 @@ function luks_reencrypt {
     # we need to perform reencryption during installation, after dd'ing the image to
     # disk and prior to mounting it.
     {
-	cryptsetup reencrypt --key-file "$luks_keyfile" --progress-frequency 1 $luks_dev 2>&1|
+	LC_ALL=C cryptsetup reencrypt --key-file "$luks_keyfile" --progress-frequency 1 $luks_dev 2>&1|
 	    sed -u 's/.* \([0-9]*\)[0-9.]*%.*/\1/'
 	    echo 100
     } | display_gauge "Re-encrypting root file system on $luks_dev"
@@ -410,7 +410,7 @@ function luks_decrypt {
     # we need to perform reencryption during installation, after dd'ing the image to
     # disk and prior to mounting it.
     {
-	cryptsetup reencrypt --decrypt --key-file "$luks_keyfile" --progress-frequency 1 $luks_dev 2>&1|
+	LC_ALL=C cryptsetup reencrypt --decrypt --key-file "$luks_keyfile" --progress-frequency 1 $luks_dev 2>&1|
 	    sed -u 's/.* \([0-9]*\)[0-9.]*%.*/\1/'
 	    echo 100
     } | display_gauge "Decrypting LUKS device $luks_dev"
