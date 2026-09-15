@@ -436,7 +436,9 @@ function tpm_seal_secret {
 ##################################################################
 # Authorized policy support
 ##################################################################
-function tpm_set_authorized_policy_paths {
+# Define the authorized policy paths without touching the file system,
+# so that read-only callers can look the files up.
+function tpm_define_authorized_policy_paths {
 
     policy_name="$1"
 
@@ -447,6 +449,11 @@ function tpm_set_authorized_policy_paths {
     declare -g FDE_AP_AUTHPOLICY="$FDE_AP_CONFIG_DIR/authorized-policy.tpm"
     declare -g FDE_AP_PUBLIC_KEY="$FDE_AP_CONFIG_DIR/public-key.tpm"
     declare -g FDE_AP_SEALED_SECRET="$FDE_AP_CONFIG_DIR/sealed.tpm"
+}
+
+function tpm_set_authorized_policy_paths {
+
+    tpm_define_authorized_policy_paths "$1"
 
     mkdir -p -m 755 "$FDE_AP_CONFIG_DIR"
 }

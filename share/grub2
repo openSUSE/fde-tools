@@ -171,11 +171,46 @@ function grub_check_sealed_key {
 	return 1
     fi
 
-    if [ -f "$grub_efi_dir/sealed.tpm" ]; then
-        return 0
+    local sealed_key="$grub_efi_dir/sealed.tpm"
+
+    if [ ! -f "${sealed_key}" ]; then
+	return 1
     fi
 
-    return 1
+    # Without authorized policies there is no base key to compare
+    # against: the key in the EFI partition is the key.
+    if [[ ! "$FDE_USE_AUTHORIZED_POLICIES" =~ y.* ]]; then
+	return 0
+    fi
+
+    # With authorized policies, the signed key in the EFI partition is
+    # only valid if it is derived from the sealed base key. Anything that
+    # prevents the comparison leaves a stale key indistinguishable from a
+    # good one, so report the key as not sealed and let tpm_enable emit a
+    # proper error.
+    if [ -z "${FDE_AUTHORIZED_POLICY}" ]; then
+	fde_trace "Authorized policy not created yet: ESP key is stale."
+	return 1
+    fi
+
+    # The paths are defined here since this function may run before any
+    # caller of tpm_set_authorized_policy_paths.
+    tpm_define_authorized_policy_paths "${FDE_AUTHORIZED_POLICY}"
+
+    if [ ! -f "${FDE_AP_SEALED_SECRET}" ]; then
+	fde_trace "Base key not found: the sealed key in the ESP is stale."
+	return 1
+    fi
+
+    if ! type tpm2key-tool >/dev/null 2>&1; then
+	fde_trace "tpm2key-tool not available: cannot verify the ESP key."
+	return 0
+    fi
+
+    # If both keys contain the same public and private keys, the signed
+    # key is derived from the base key.
+    tpm2key-tool cmp "${sealed_key}" "${FDE_AP_SEALED_SECRET}" >/dev/null 2>&1
+    return $?
 }
 
 function grub_remove_sealed_key {
