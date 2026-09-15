@@ -323,8 +323,11 @@ function tpm_seal_key {
 			--after \
 			seal-secret \
 			"$FDE_SEAL_PCR_LIST"
+    local rc=$?
 
     tpm_snapshot
+
+    return $rc
 }
 
 function tpm_test {
