@@ -508,6 +508,14 @@ function tpm_authorize {
     local extra_opts=$(tpm_platform_parameters)
     local stop_event=$(bootloader_stop_event)
 
+    # pcr-oracle writes straight to its --output, which is the key the
+    # boot loader is currently using. Sign into a sibling file and rename
+    # it over the live one only on success, so that a failed signature
+    # leaves the previous working key in place. The staged file must be a
+    # sibling to stay on the same file system, otherwise the rename falls
+    # back to a copy and may leave a partial key behind.
+    local staged_key_file="${signed_key_file}.new"
+
     pcr-oracle ${extra_opts} \
 		--algorithm "$FDE_SEAL_PCR_BANK" \
                 --private-key "$private_key_file" \
@@ -515,9 +523,16 @@ function tpm_authorize {
 		--stop-event "$stop_event" \
 		--after \
 		--input "$sealed_key_file" \
-                --output "$signed_key_file" \
+                --output "$staged_key_file" \
                 sign "$FDE_SEAL_PCR_LIST"
     local rc=$?
+
+    if [ $rc -eq 0 ]; then
+	mv -f "$staged_key_file" "$signed_key_file"
+	rc=$?
+    else
+	rm -f "$staged_key_file"
+    fi
 
     tpm_snapshot
 
