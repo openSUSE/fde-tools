@@ -35,6 +35,11 @@ function tpm_enable {
 	had_fde_password=y
     fi
 
+    # Ensure the sealed key is usable before removing firstboot password.
+    if ! tpm_enable_check_sealed_key; then
+	return 1
+    fi
+
     # The installer may have set a random password to avoid the password
     # prompt on firstboot.
     # We must clear this before computing any PCR policies, otherwise
@@ -89,6 +94,35 @@ function tpm_enable {
     fi
 
     return $st
+}
+
+# Verify that the sealed key can be loaded and get its SRK algorithm.
+function tpm_enable_check_sealed_key {
+
+    if [[ ! "$FDE_USE_AUTHORIZED_POLICIES" =~ y.* ]] ||
+       [ -z "$FDE_AUTHORIZED_POLICY" ]; then
+	return 0
+    fi
+
+    # Older pcr-oracle versions cannot answer this, skip check.
+    if ! tpm_have_load_test; then
+	fde_trace "Unable to determine the SRK of the sealed key"
+	return 0
+    fi
+
+    tpm_define_authorized_policy_paths "$FDE_AUTHORIZED_POLICY"
+
+    if [ ! -f "$FDE_AP_SEALED_SECRET" ]; then
+	# Handled by tpm_enable_authorized_policy.
+	return 0
+    fi
+
+    if tpm_get_srk_alg "$FDE_AP_SEALED_SECRET" >/dev/null; then
+	return 0
+    fi
+
+    display_errorbox "The sealed key in $FDE_AP_SEALED_SECRET cannot be loaded by this TPM. Refusing to update the boot loader configuration, as the system would no longer boot unattended. Use \"fdectl regenerate-key\" to seal a new key."
+    return 1
 }
 
 function tpm_enable_authorized_policy {

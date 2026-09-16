@@ -75,6 +75,16 @@ function grub_get_fde_password {
     echo "$GRUB_CRYPTODISK_PASSWORD"
 }
 
+# Get the configured SRK algorithm from grub.
+function grub_get_srk_alg {
+
+    if [ -f /etc/default/grub ]; then
+	. /etc/default/grub
+    fi
+
+    echo "$GRUB_TPM2_SRK_ALG"
+}
+
 ##################################################################
 # Print the path of the sealed key the boot loader reads.
 ##################################################################
@@ -97,13 +107,14 @@ function grub_get_sealed_key_path {
 function grub_update_early_config {
 
     local sealed_key_file="$1"
+    local srk_alg="$2"
 
     grub_set_control GRUB_ENABLE_CRYPTODISK "y"
     grub_set_control GRUB_TPM2_SEALED_KEY "$sealed_key_file"
-    if [ "$(tpm_get_ecc_srk_support)" = "yes" ]; then
-	grub_set_control GRUB_TPM2_SRK_ALG "ECC"
-    else
-	grub_set_control GRUB_TPM2_SRK_ALG "RSA"
+
+    # Keep current SRK setting if caller cannot determine it.
+    if [ -n "$srk_alg" ]; then
+	grub_set_control GRUB_TPM2_SRK_ALG "$srk_alg"
     fi
 
     # Do not clear the password implicitly; require fdectl or
@@ -128,8 +139,37 @@ function grub_commit_config {
 
 function grub_enable_fde_authorized_policy {
 
-    # Set up grub.cfg
-    grub_update_early_config sealed.tpm
+    local sealed_key_file="$1"
+
+    # Retain the key's existing SRK.
+    grub_update_early_config sealed.tpm "$(tpm_get_srk_alg "$sealed_key_file")"
+}
+
+##################################################################
+# Align configured SRK algorithm with the key's actual SRK.
+##################################################################
+function grub_repair_srk_alg {
+
+    local sealed_key_file="$1"
+    local srk_alg
+    local config_alg
+
+    srk_alg=$(tpm_get_srk_alg "$sealed_key_file") || return 0
+
+    config_alg=$(grub_get_srk_alg)
+    if [ "$srk_alg" = "$config_alg" ]; then
+	return 0
+    fi
+
+    fde_trace "Boot loader configured for a ${config_alg:-unset} SRK, but the sealed key uses ${srk_alg}; updating the configuration"
+
+    grub_set_control GRUB_TPM2_SRK_ALG "$srk_alg"
+
+    # Commit config before signing.
+    if ! grub_commit_config; then
+	fde_trace "Failed to update the boot loader configuration"
+	return 1
+    fi
 }
 
 function grub_authorize_pcr_policy {
@@ -139,6 +179,10 @@ function grub_authorize_pcr_policy {
 
     local grub_sealed_key
     grub_sealed_key=$(grub_get_sealed_key_path) || return 1
+
+    if ! grub_repair_srk_alg "$sealed_key_file"; then
+	return 1
+    fi
 
     # Right now, we support only a single authorization. Down the road,
     # we should probably create sub-directories (using a hash of the
@@ -157,7 +201,7 @@ function grub_enable_fde_pcr_policy {
     grub_sealed_key=$(grub_get_sealed_key_path) || return 1
 
     # First update grub.cfg...
-    grub_update_early_config sealed.tpm
+    grub_update_early_config sealed.tpm "$(tpm_get_new_srk_alg)"
 
     # ... then seal the key against a PCR9 value that covers grub.cfg
     tpm_seal_secret "${luks_keyfile}" "$grub_sealed_key"
