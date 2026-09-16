@@ -125,6 +125,61 @@ function tpm_get_ecc_srk_support {
     echo "$__fde_ecc_srk"
 }
 
+##################################################################
+# Check if pcr-oracle supports load-test.
+##################################################################
+function tpm_have_load_test {
+
+    declare -g __fde_have_load_test
+
+    if [ -z "$__fde_have_load_test" ]; then
+	if LC_ALL=C pcr-oracle load-test 2>&1 | grep -q "Unknown action"; then
+	    __fde_have_load_test="no"
+	else
+	    __fde_have_load_test="yes"
+	fi
+    fi
+
+    [ "$__fde_have_load_test" = "yes" ]
+}
+
+##################################################################
+# Get the SRK algorithm of an existing sealed key.
+##################################################################
+function tpm_get_srk_alg {
+
+    local sealed_key="$1"
+
+    declare -g __fde_srk_alg
+
+    if [ -z "$__fde_srk_alg" ]; then
+	if [ ! -f "$sealed_key" ] || ! tpm_have_load_test; then
+	    return 1
+	fi
+
+	__fde_srk_alg=$(pcr-oracle --input "$sealed_key" load-test 2>/dev/null)
+	if [ -z "$__fde_srk_alg" ]; then
+	    fde_trace "${sealed_key} cannot be loaded under any known SRK"
+	    return 1
+	fi
+    fi
+
+    echo "$__fde_srk_alg"
+}
+
+##################################################################
+# Get the expected SRK algorithm for a newly sealed key.
+##################################################################
+function tpm_get_new_srk_alg {
+
+    if [ "$(tpm_get_ecc_srk_support)" = "yes" ]; then
+	echo "ECC"
+	return
+    fi
+
+    echo "RSA2048"
+}
+
 function tpm_snapshot {
     # TODO Add an ID to the snapshot name
     local snapshot=${FDE_SNAPSHOT_NAME}
