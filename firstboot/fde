@@ -52,6 +52,10 @@ function bootloader_get_fde_password {
     grub_get_fde_password "$@"
 }
 
+function bootloader_get_keyslots {
+    grub_get_keyslots "$@"
+}
+
 function bootloader_platform_parameters {
    grub_platform_parameters
 }
@@ -86,6 +90,10 @@ function fde_setup_encrypted {
     with_pass=false
     with_tpm=false
     with_ccid=false
+
+    # Set when the user asked for a recovery password but we could not install
+    # it. The key slots have to be left alone in that case.
+    pass_failed=false
 
     is_reencrypted=false
 
@@ -134,46 +142,77 @@ function fde_setup_encrypted {
 
     luks_current_password="${luks_recovery_pass}"
 
-    # Check if the installer/imager has created a secondary slot that is protected
-    # by a random key.
-    # "cryptsetup reencrypt" doesn't really deal all that well with a LUKS
-    # header that has more than one valid key slot. To avoid any ugly gymnastics,
-    # simply drop that slot.
-    if [ -n "$luks_keyfile" ]; then
-	# Skip luks_drop_key if the partition is already reencrypted
-	if [ "$is_reencrypted" == "false" ]; then
-	    if ! luks_drop_key "${luks_dev}" "${luks_keyfile}"; then
-		display_errorbox "Failed to remove initial random key"
-		return 1
-	    fi
-	fi
-
-	rm -f "${luks_keyfile}"
-
-	# Remove the dracut conf for the key file
-	rm -f /etc/dracut.conf.d/99-luks-boot.conf
-
-	# Replace the key file path in /etc/crypttab with "/.virtual-root.key"
-	# to avoid errors when unmounting the LUKS partition (bsc#1218181)
-	sed -i "s,${luks_keyfile},/.virtual-root.key,g" /etc/crypttab
-
-	luks_keyfile=""
+    # The installer/imager may have created a secondary slot that is protected
+    # by a random key, stored in ${luks_keyfile}. That key is a far better
+    # credential than the built-in recovery password: we can check that it is
+    # valid, whereas the recovery password is only a guess, and in FIPS mode
+    # PBKDF2 refuses passphrases shorter than 8 characters, so a short built-in
+    # password fails to open any key slot at all.
+    # Do not drop the slot here: it is the only credential we are sure about,
+    # and both the recovery path below and fde_setup_unencrypted still need it.
+    luks_imager_keyfile=""
+    if [ -n "$luks_keyfile" ] && luks_verify_password "${luks_dev}" "${luks_keyfile}"; then
+	luks_imager_keyfile="${luks_keyfile}"
     fi
 
     # Change the built-in recovery password to the one provided by the user
     # FIXME: only do this if the password is well-known, eg when dealing with a VM image
     # shipped by us.
     if $with_pass; then
-	if luks_change_password "${luks_dev}" "${luks_current_password}"; then
+	if luks_change_password "${luks_dev}" "${luks_current_password}" "${luks_imager_keyfile}"; then
 	    luks_current_password="${result_password}"
 	else
 	    display_errorbox "Failed to change recovery password."
 	    with_pass=false
+	    pass_failed=true
 	fi
     fi
 
     # Write the current password to a file for the later operations
     pass_keyfile=$(luks_write_password pass "${luks_current_password}")
+
+    # Now that the recovery password is in place, drop every key slot we no
+    # longer need: the imager's random key, and the slot that still holds the
+    # built-in recovery password when luks_change_password authenticated with
+    # the imager key rather than with that password. TPM protected slots are
+    # preserved.
+    # "cryptsetup reencrypt" doesn't really deal all that well with a LUKS
+    # header that has more than one valid key slot, so this has to happen
+    # before luks_reencrypt below.
+    # Leave the header alone if we failed to install the recovery password:
+    # dropping slots at that point would only throw away the last credential
+    # the recovery path below can still use.
+    drop_imager_keyfile=false
+    if $with_pass; then
+	if ! luks_drop_other_keyslots "${luks_dev}" "${pass_keyfile}"; then
+	    display_errorbox "Failed to remove initial random key"
+	    return 1
+	fi
+	drop_imager_keyfile=true
+    elif ! $pass_failed && [ -n "$luks_imager_keyfile" ]; then
+	# No recovery password was requested, so there is no obsolete slot to
+	# collect either; just drop the imager's random key as we always did.
+	if ! luks_drop_key "${luks_dev}" "${luks_imager_keyfile}"; then
+	    display_errorbox "Failed to remove initial random key"
+	    return 1
+	fi
+	drop_imager_keyfile=true
+    fi
+
+    if $drop_imager_keyfile && [ -n "$luks_keyfile" ]; then
+	rm -f "${luks_keyfile}"
+
+	# Remove the dracut conf for the key file
+	rm -f /etc/dracut.conf.d/99-luks-boot.conf
+
+	# Replace the key file path in /etc/crypttab with
+	# "/.virtual-root.key" to avoid errors when unmounting the LUKS
+	# partition (bsc#1218181). The path must not be on / itself, which is
+	# read-only on SL Micro.
+	sed -i "s,${luks_keyfile},/.virtual-root.key,g" /etc/crypttab
+
+	luks_keyfile=""
+    fi
 
     # Reencrypt with the new password
     # FIXME: only do this if the LUKS master key is well-known, eg when dealing with
@@ -236,7 +275,18 @@ function fde_setup_unencrypted {
 	return 1
     fi
 
-    luks_decrypt "${luks_dev}" "${luks_keyfile}"
+    # We may be called to recover from a failed fde_setup_encrypted, which
+    # drops the imager key file once it is no longer needed. Fall back to the
+    # recovery password in that case.
+    if [ ! -s "${luks_keyfile}" ]; then
+	luks_keyfile=$(luks_write_password recovery "${luks_recovery_pass}")
+    fi
+
+    if ! luks_decrypt "${luks_dev}" "${luks_keyfile}"; then
+	rm -f "${luks_keyfile}"
+	display_errorbox "Failed to decrypt ${luks_dev}"
+	return 1
+    fi
 
     rm -f "${luks_keyfile}"
     rm -f /etc/crypttab
@@ -322,6 +372,14 @@ function fde_choose_protection {
 
 function fde_firstboot {
 
+    # fde_setup_encrypted keeps these two up to date as it goes: it consumes
+    # the imager key file once the recovery password is in place, and replaces
+    # the built-in recovery password with the one chosen by the user. The
+    # recovery path below has to use whatever is valid by then, not the
+    # credentials we were originally called with.
+    luks_keyfile="$2"
+    luks_current_password="$3"
+
     if fde_choose_protection; then
 	if fde_setup_encrypted "$@"; then
 	    return 0
@@ -330,7 +388,7 @@ function fde_firstboot {
 	display_errorbox "Failed to set up for full disk encryption. Trying to recover"
     fi
 
-    fde_setup_unencrypted "$@"
+    fde_setup_unencrypted "$1" "${luks_keyfile}" "${luks_current_password}"
 }
 
 function fde_systemd_firstboot {
