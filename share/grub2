@@ -76,6 +76,21 @@ function grub_get_fde_password {
 }
 
 ##################################################################
+# Print the path of the sealed key the boot loader reads.
+##################################################################
+function grub_get_sealed_key_path {
+
+    local grub_efi_dir
+    grub_efi_dir=$(uefi_get_current_efidir)
+
+    if [ -z "$grub_efi_dir" ]; then
+	return 1
+    fi
+
+    echo "$grub_efi_dir/sealed.tpm"
+}
+
+##################################################################
 # Update the grub.cfg residing on the EFI partition to properly
 # unseal the TPM protected LUKS partition
 ##################################################################
@@ -122,10 +137,8 @@ function grub_authorize_pcr_policy {
     private_key_file="$1"
     sealed_key_file="$2"
 
-    grub_efi_dir=$(uefi_get_current_efidir)
-    if [ -z "$grub_efi_dir" ]; then
-	return 1
-    fi
+    local grub_sealed_key
+    grub_sealed_key=$(grub_get_sealed_key_path) || return 1
 
     # Right now, we support only a single authorization. Down the road,
     # we should probably create sub-directories (using a hash of the
@@ -133,23 +146,21 @@ function grub_authorize_pcr_policy {
     # append the valid signatures into the key file.
 
     tpm_authorize "$private_key_file" "$sealed_key_file" \
-		  "$grub_efi_dir/sealed.tpm"
+		  "$grub_sealed_key"
 }
 
 function grub_enable_fde_pcr_policy {
 
     luks_keyfile="$1"
 
-    grub_efi_dir=$(uefi_get_current_efidir)
-    if [ -z "$grub_efi_dir" ]; then
-	return 1
-    fi
+    local grub_sealed_key
+    grub_sealed_key=$(grub_get_sealed_key_path) || return 1
 
     # First update grub.cfg...
     grub_update_early_config sealed.tpm
 
     # ... then seal the key against a PCR9 value that covers grub.cfg
-    tpm_seal_secret "${luks_keyfile}" "$grub_efi_dir/sealed.tpm"
+    tpm_seal_secret "${luks_keyfile}" "$grub_sealed_key"
 }
 
 function grub_enable_fde_without_tpm {
@@ -166,12 +177,8 @@ function grub_enable_fde_without_tpm {
 
 function grub_check_sealed_key {
 
-    grub_efi_dir=$(uefi_get_current_efidir)
-    if [ -z "$grub_efi_dir" ]; then
-	return 1
-    fi
-
-    local sealed_key="$grub_efi_dir/sealed.tpm"
+    local sealed_key
+    sealed_key=$(grub_get_sealed_key_path) || return 1
 
     if [ ! -f "${sealed_key}" ]; then
 	return 1
@@ -216,11 +223,8 @@ function grub_check_sealed_key {
 function grub_remove_sealed_key {
 
     # Remove the sealed key file in the EFI system partition
-    grub_efi_dir=$(uefi_get_current_efidir)
-    if [ -z "$grub_efi_dir" ]; then
-	return 1
-    fi
-    grub_sealed_key="$grub_efi_dir/sealed.tpm"
+    local grub_sealed_key
+    grub_sealed_key=$(grub_get_sealed_key_path) || return 1
 
     if [ -f "${grub_sealed_key}" ]; then
         rm -f "${grub_sealed_key}"
