@@ -28,6 +28,13 @@ function tpm_enable {
 
     st=1
 
+    # Remember whether a firstboot password was set: the removal below
+    # clears it, so the check further down can no longer detect it.
+    local had_fde_password=
+    if [ -n "$(bootloader_get_fde_password)" ]; then
+	had_fde_password=y
+    fi
+
     # The installer may have set a random password to avoid the password
     # prompt on firstboot.
     # We must clear this before computing any PCR policies, otherwise
@@ -66,9 +73,11 @@ function tpm_enable {
 	# systemd). Obviously, there was no key to enroll, so we might
 	# as well return.
 	#
-	# However, if there was a firstboot password, fall thru to remove the password.
+	# However, if there was a firstboot password, fall thru to commit
+	# the configuration, so that the password is dropped from the
+	# boot loader config in the ESP too.
 	# After all, it's supposed to be good for one reboot only.
-	if [ "$(bootloader_get_fde_password)" = "" ]; then
+	if [ -z "$had_fde_password" ]; then
 	    return 0
 	fi
 	st=0

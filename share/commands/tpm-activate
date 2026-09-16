@@ -26,7 +26,11 @@ function cmd_tpm_activate {
 
     local luks_devices="$1"
 
-    if bootloader_check_sealed_key; then
+    # A sealed key alone is not enough to skip activation: the installer
+    # may have left a firstboot password behind, and it is only good for
+    # one reboot. tpm_enable removes it, so let it run in that case.
+    if bootloader_check_sealed_key && \
+       [ -z "$(bootloader_get_fde_password)" ]; then
         fde_trace "LUKS key already sealed. Skip activation."
         return 0
     fi
