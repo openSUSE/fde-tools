@@ -58,6 +58,10 @@ to remove the password explicitly, you can use
 
 	# fdectl remove-secondary-password
 
+Note: If authorized policy is used, you must run ``fdectl tpm-authorize``
+after ``fdectl remove-secondary-password`` to authorize the new boot loader
+configuration. Otherwise, the TPM will fail to unseal the key on the next
+boot.
 
 ## Installation using PCR Policies
 
