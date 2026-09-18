@@ -68,11 +68,23 @@ function grub_get_fde_password {
 
     . /etc/default/grub
 
-    if [ -z "$GRUB_CRYPTODISK_PASSWORD" ]; then
-	return 1
+    if [ -n "$GRUB_CRYPTODISK_PASSWORD" ]; then
+	echo "$GRUB_CRYPTODISK_PASSWORD"
+	return 0
     fi
 
-    echo "$GRUB_CRYPTODISK_PASSWORD"
+    # Fallback: the image build may have embedded the well-known
+    # passphrase directly in the EFI grub.cfg via 'cryptomount -p "..."'
+    # instead of GRUB_CRYPTODISK_PASSWORD in /etc/default/grub.
+    local pass
+    [ -f /boot/efi/EFI/BOOT/grub.cfg ] || return 1
+    pass=$(sed -n 's/.*cryptomount[[:space:]].*-p[[:space:]]*"\([^"]*\)".*/\1/p' /boot/efi/EFI/BOOT/grub.cfg | head -n1)
+    if [ -n "$pass" ]; then
+	echo "$pass"
+	return 0
+    fi
+
+    return 1
 }
 
 # Get the configured SRK algorithm from grub.
