@@ -76,15 +76,13 @@ function grub_get_fde_password {
     # Fallback: the image build may have embedded the well-known
     # passphrase directly in the EFI grub.cfg via 'cryptomount -p "..."'
     # instead of GRUB_CRYPTODISK_PASSWORD in /etc/default/grub.
-    local cfg pass
-    for cfg in /boot/efi/EFI/BOOT/grub.cfg /boot/efi/EFI/*/grub.cfg; do
-	[ -f "$cfg" ] || continue
-	pass=$(sed -n 's/.*cryptomount[[:space:]].*-p[[:space:]]*"\([^"]*\)".*/\1/p' "$cfg" | head -n1)
-	if [ -n "$pass" ]; then
-		echo "$pass"
-		return 0
-	fi
-    done
+    local pass
+    [ -f /boot/efi/EFI/BOOT/grub.cfg ] || return 1
+    pass=$(sed -n 's/.*cryptomount[[:space:]].*-p[[:space:]]*"\([^"]*\)".*/\1/p' /boot/efi/EFI/BOOT/grub.cfg | head -n1)
+    if [ -n "$pass" ]; then
+	echo "$pass"
+	return 0
+    fi
 
     return 1
 }
