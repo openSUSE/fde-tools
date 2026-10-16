@@ -15,7 +15,8 @@ FDE_KEY_SIZE_BYTES=128
 FDE_TPM2_SRK_ATTRS="userwithauth|restricted|decrypt|fixedtpm|fixedparent|noda|sensitivedataorigin"
 
 # The PBKDF algorithm to use for deriving LUKS keys from a given password
-# For grub2 based schemes, you have to use pbkdf2 for now.
+# Must be either pbkdf2 or argon2id
+# For grub2 below 2.14, you have to use pbkdf2.
 FDE_LUKS_PBKDF="pbkdf2"
 
 # Enable/disable tracing output

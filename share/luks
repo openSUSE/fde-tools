@@ -331,6 +331,10 @@ function luks_set_password {
     local luks_keyfile="$2"
     local luks_new_keyfile="$3"
 
+    if ! luks_verify_config_pbkdf; then
+        return 1
+    fi
+
     display_infobox "Updating LUKS password (${luks_dev})"
 
     if ! cryptsetup --key-file "${luks_keyfile}" luksChangeKey --pbkdf "$FDE_LUKS_PBKDF" "${luks_dev}" ${luks_new_keyfile}; then
@@ -399,6 +403,10 @@ function luks_add_password {
     local luks_keyfile="$2"
     local luks_new_password="$3"
 
+    if ! luks_verify_config_pbkdf; then
+        return 1
+    fi
+
     if [ -z "$luks_new_password" ]; then
 	request_new_password "Please enter new LUKS recovery password"
 	if [ -z "$result_password" ]; then
@@ -419,6 +427,30 @@ function luks_add_password {
     rm -f ${new_keyfile}
 }
 
+##################################################################
+# Minimum iterations for $FDE_LUKS_PBKDF allowed by cryptsetup
+##################################################################
+function luks_get_minimum_pbkdf_iterations {
+
+    case "$FDE_LUKS_PBKDF" in
+    pbkdf2)
+        echo 1000
+        ;;
+    argon2id)
+        echo 4
+        ;;
+    *)
+        fde_trace "Error: Invalid FDE_LUKS_PBKDF '$FDE_LUKS_PBKDF'. Must be either pbkdf2 or argon2id."
+        return 1
+        ;;
+    esac
+}
+
+function luks_verify_config_pbkdf {
+
+    luks_get_minimum_pbkdf_iterations > /dev/null
+}
+
 function luks_add_key {
 
     local luks_dev="$1"
@@ -426,17 +458,22 @@ function luks_add_key {
     local new_keyfile="$3"
     local luks_output
     local luks_keyslot
+    local tpm_pbkdf_iterations
+
+    # Note: we try to reduce the cost of PBKDF to (almost) nothing.
+    # There's no need in slowing down this operation for a
+    # key that was random to begin with.
+    if ! tpm_pbkdf_iterations=$(luks_get_minimum_pbkdf_iterations); then
+        return 1
+    fi
 
     if [ -z "$new_keyfile" ]; then
         echo "Unable to obtain new key" >&2
         return 1
     fi
 
-    # Note: we try to reduce the cost of PBKDF to (almost) nothing.
-    # There's no need in slowing down this operation for a
-    # key that was random to begin with.
     luks_output=$(LC_ALL=C cryptsetup --verbose --key-file "${luks_keyfile}" luksAddKey \
-		  --pbkdf "$FDE_LUKS_PBKDF" --pbkdf-force-iterations 1000 \
+		  --pbkdf "$FDE_LUKS_PBKDF" --pbkdf-force-iterations ${tpm_pbkdf_iterations} \
 		  ${luks_dev} ${new_keyfile})
     if test $? -ne 0; then
 	fde_trace "Warning: luksAddKey indicates failure"
@@ -469,12 +506,17 @@ function luks_set_key {
     local luks_dev="$1"
     local luks_keyfile="$2"
     local new_keyfile="$3"
+    local tpm_pbkdf_iterations
 
     # Note: we try to reduce the cost of PBKDF to (almost) nothing.
     # There's no need in slowing down this operation for a
     # key that was random to begin with.
+    if ! tpm_pbkdf_iterations=$(luks_get_minimum_pbkdf_iterations); then
+        return 1
+    fi
+
     cryptsetup --key-file "${luks_keyfile}" luksChangeKey \
-		--pbkdf "$FDE_LUKS_PBKDF" --pbkdf-force-iterations 1000 \
+		--pbkdf "$FDE_LUKS_PBKDF" --pbkdf-force-iterations ${tpm_pbkdf_iterations} \
 		$luks_dev $new_keyfile
 }
 

@@ -202,6 +202,11 @@ FDE_LOG_DIR=/var/log/fde
 . /etc/sysconfig/fde-tools
 . "$SHAREDIR/ui/$opt_ui"
 . "$SHAREDIR/util"
+
+if ! luks_verify_config_pbkdf; then
+    exit 1
+fi
+
 . "$SHAREDIR/tpm"
 . "$SHAREDIR/$opt_bootloader"
 . "$SHAREDIR/commands/$command"
