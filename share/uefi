@@ -48,13 +48,10 @@ function uefi_set_loader {
 
 function uefi_get_current_loader {
 
-    entry=$(LC_ALL=C efibootmgr | grep BootCurrent|awk '{print $2;}')
-    if [ -z "$entry" ]; then
-	fde_trace "Cannot determine current UEFI boot entry"
+    if ! file=$(fde-boot-loader); then
+	fde_trace "fde-boot-loader failed"
 	return 1
     fi
-
-    file=$(LC_ALL=C efibootdump "Boot$entry" | sed 's/.*File(\([^)]*\)).*/\1/;t;d' | tr '\\' /)
 
     # Some boot setups do not use an EFI path with a file component.
     #
@@ -74,7 +71,7 @@ function uefi_get_current_loader {
     fi
 
     if [ -z "$file" ]; then
-	fde_trace "Cannot determine loader path for UEFI boot entry $entry"
+	fde_trace "Cannot determine loader path for current UEFI boot entry"
 	return 1
     fi
 

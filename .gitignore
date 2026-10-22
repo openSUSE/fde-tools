@@ -3,6 +3,7 @@
 pcr-oracle
 fde-token
 fdectl-grub-tpm2
+fde-boot-loader
 *.bz2
 kiwi*.log
 LOG
