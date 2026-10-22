@@ -17,7 +17,8 @@ FDE_LOG_DIR	= $(LOCALSTATEDIR)/log/fde
 RPM_MACRO_DIR	?= /etc/rpm
 FIDO_LINK	= -lfido2 -lcrypto
 CRPYT_LINK	= -lcryptsetup -ljson-c
-TOOLS		= fde-token fdectl-grub-tpm2
+EFIVAR_LINK	= -lefivar
+TOOLS		= fde-token fdectl-grub-tpm2 fde-boot-loader
 TOKEN_LINK	= -lcryptsetup
 TOKEN_ABI_PATH	= cryptsetup/libcryptsetup-token.sym
 TOKEN_PLUGINS	= libcryptsetup-token-grub-tpm2.so
@@ -97,6 +98,9 @@ fde-token: build/fde-token.o
 
 fdectl-grub-tpm2: build/fdectl-grub-tpm2.o
 	$(CC) -o $@ $< $(CRPYT_LINK)
+
+fde-boot-loader: build/fde-boot-loader.o
+	$(CC) -o $@ $< $(EFIVAR_LINK)
 
 libcryptsetup-token-grub-tpm2.so: build/cryptsetup/cryptsetup-token-grub-tpm2.o
 	$(CC) -o $@ $< $(TOKEN_LINK) -shared -Wl,--version-script=$(TOKEN_ABI_PATH)
