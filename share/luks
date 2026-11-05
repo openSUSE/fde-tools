@@ -490,17 +490,6 @@ function luks_generate_random_key {
     dd if=/dev/random bs=1 count=$FDE_KEY_SIZE_BYTES of=$new_keyfile status=none
 }
 
-function luks_add_random_key {
-
-    local luks_dev="$1"
-    local luks_keyfile="$2"
-    local new_keyfile="$3"
-
-    luks_generate_random_key ${new_keyfile}
-
-    luks_add_key ${luks_dev} ${luks_keyfile} ${new_keyfile}
-}
-
 function luks_set_key {
 
     local luks_dev="$1"
@@ -518,22 +507,6 @@ function luks_set_key {
     cryptsetup --key-file "${luks_keyfile}" luksChangeKey \
 		--pbkdf "$FDE_LUKS_PBKDF" --pbkdf-force-iterations ${tpm_pbkdf_iterations} \
 		$luks_dev $new_keyfile
-}
-
-function luks_set_random_key {
-    local luks_dev="$1"
-    local luks_keyfile="$2"
-
-    new_keyfile=/dev/shm/new.keyfile
-    luks_generate_random_key ${new_keyfile}
-
-    luks_set_key ${luks_dev} ${luks_keyfile} ${new_keyfile}
-    ret=$?
-
-    cp $new_keyfile "${luks_keyfile}"
-    rm -f $new_keyfile
-
-    return $ret
 }
 
 function luks_reencrypt {
