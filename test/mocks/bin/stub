@@ -1,0 +1,28 @@
+#!/bin/bash
+cmd=$(basename "$0")
+
+if [ -n "$MOCK_LOG" ]; then
+    echo "$cmd $*" >> "$MOCK_LOG"
+fi
+
+if [ -n "$MOCK_DIR" ]; then
+    if [ -x "$MOCK_DIR/$cmd.sh" ]; then
+        exec "$MOCK_DIR/$cmd.sh" "$@"
+    elif [ -f "$MOCK_DIR/$cmd.sh" ]; then
+        exec bash "$MOCK_DIR/$cmd.sh" "$@"
+    fi
+
+    if [ -f "$MOCK_DIR/$cmd.out" ]; then
+        cat "$MOCK_DIR/$cmd.out"
+    fi
+
+    if [ -f "$MOCK_DIR/$cmd.err" ]; then
+        cat "$MOCK_DIR/$cmd.err" >&2
+    fi
+
+    if [ -f "$MOCK_DIR/$cmd.rc" ]; then
+        exit "$(cat "$MOCK_DIR/$cmd.rc")"
+    fi
+fi
+
+exit 0

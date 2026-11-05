@@ -1,0 +1,4 @@
+# Baseline .shellcheckrc for fde-tools
+# Codes disabled here represent pre-existing legacy patterns in the shell scripts.
+# As refactoring proceeds, these should be removed to make checks stricter.
+disable=SC1090,SC1091,SC2005,SC2006,SC2034,SC2045,SC2046,SC2048,SC2086,SC2116,SC2119,SC2120,SC2124,SC2154,SC2155,SC2162,SC2166,SC2172,SC2174,SC2181,SC2219,SC2223,SC2229,SC2268,SC2295,SC2317

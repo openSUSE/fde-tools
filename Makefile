@@ -48,9 +48,31 @@ _LIBSCRIPTS	= $(addprefix share/,$(LIBSCRIPTS))
 
 SUBDIRS := man bash-completion
 
-.PHONY: all install $(SUBDIRS)
+.PHONY: all install $(SUBDIRS) clean dist check check-static check-unit \
+        check-luks check-c check-root
 
 all:: $(TOOLS) $(SUBDIRS) $(TOKEN_PLUGINS)
+
+BATS            ?= bats
+SHELLCHECK      ?= shellcheck
+
+check: check-static check-unit
+
+SHELL_SOURCES	= fde.sh $(_LIBSCRIPTS) firstboot/fde rpm-build/$(TPM_HELPER)
+
+check-static:
+	@# bash -n parses only its first argument, so check each file
+	@for f in $(SHELL_SOURCES); do \
+		bash -n "$$f" || exit 1; \
+	done
+	$(SHELLCHECK) -s bash $(SHELL_SOURCES)
+
+check-unit:
+	$(BATS) -r test/unit
+
+# Placeholders until the matching test suites are added
+check-luks check-c check-root:
+	@echo "$@: no tests yet"
 
 install:: $(TOOLS)
 	install -d $(DESTDIR)$(SBINDIR)
@@ -116,8 +138,8 @@ build/%.o: src/%.c
 dist:
 	mkdir -p $(PKGNAME)
 	cp -a Makefile sysconfig.fde fde.sh src share firstboot cryptsetup rpm-build \
-	      $(SUBDIRS) $(PKGNAME)
+	      test .shellcheckrc $(SUBDIRS) $(PKGNAME)
 	sed -i "s/__VERSION__/$(PKGVER)/" $(PKGNAME)/fde.sh
 	@find $(PKGNAME) \( -name '.*.swp' -o -name '*.{rej,orig}' \) -exec rm {} \;
-	tar -cvjf $(PKGNAME).tar.bz2 $(PKGNAME)/*
+	tar -cvjf $(PKGNAME).tar.bz2 $(PKGNAME)
 	rm -rf $(PKGNAME)
