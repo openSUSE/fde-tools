@@ -126,7 +126,7 @@ function enroll_tpm_secondary_key {
 	rm -f "$luks_new_keyfile"
     else
 	if [ -z "$opt_keyfile" ]; then
-	    opt_keyfile="/etc/fde/root.key"
+	    opt_keyfile="${FDE_CONFIG_DIR:-/etc/fde}/root.key"
 	fi
 
 	if ! add_secondary_key "$luks_devices" "$opt_keyfile"; then

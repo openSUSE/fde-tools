@@ -26,7 +26,7 @@
 ##################################################################
 function uefi_secure_boot_enabled {
 
-    if ! [ -d /sys/firmware/efi ]; then
+    if ! [ -d "${FDE_SYSFS:-/sys}/firmware/efi" ]; then
 	fde_trace "This system does not seem to use UEFI. Full disk encryption with TPM protection not available"
 	return 1
     fi
@@ -56,7 +56,7 @@ function uefi_get_current_loader {
     # Some boot setups do not use an EFI path with a file component.
     #
     # As a fallback, check the default EFI boot path: \EFI\BOOT\boot*.efi
-    if [ -z "$file" -a -d "/boot/efi/EFI" ]; then
+    if [ -z "$file" -a -d "${FDE_ESP_DIR:-/boot/efi}/EFI" ]; then
 	arch=$(uname -m)
 	if [ x"$arch" = xx86_64 ]; then
 	    boot_efi=bootx64.efi
@@ -64,8 +64,8 @@ function uefi_get_current_loader {
 	    boot_efi=bootaa64.efi
 	fi
 
-	if [ -f /boot/efi/EFI/BOOT/$boot_efi ]; then
-		realpath "/boot/efi/EFI/BOOT/$boot_efi"
+	if [ -f "${FDE_ESP_DIR:-/boot/efi}/EFI/BOOT/$boot_efi" ]; then
+		realpath "${FDE_ESP_DIR:-/boot/efi}/EFI/BOOT/$boot_efi"
 		return 0
 	fi
     fi
@@ -75,7 +75,7 @@ function uefi_get_current_loader {
 	return 1
     fi
 
-    realpath "/boot/efi/$file"
+    realpath "${FDE_ESP_DIR:-/boot/efi}/$file"
 }
 
 function uefi_get_current_efidir {

@@ -27,7 +27,7 @@ function tpm_present_and_working {
 
     # Try to fail more gracefully when there's no TPM (esp on platforms
     # that do not support TPM devices at all).
-    if [ ! -d /sys/class/tpm ]; then
+    if [ ! -d "${FDE_SYSFS:-/sys}/class/tpm" ]; then
 	fde_trace "There do not seem to be any TPM devices."
     fi
 
@@ -206,7 +206,7 @@ function tpm_snapshot {
 		predict "$FDE_SEAL_PCR_LIST" > ${tmpdir}/predicted-pcr.txt
 
     mv ${tmpdir}/predicted-pcr.txt ${tmpdir}/${snapshot}/predicted-pcr.txt
-    cp /proc/sys/kernel/random/boot_id ${tmpdir}/${snapshot}/boot_id
+    cp "${FDE_PROCFS:-/proc}/sys/kernel/random/boot_id" ${tmpdir}/${snapshot}/boot_id
 
     tar Jcf ${FDE_LOG_DIR}/${snapshot}.tar.xz -C ${tmpdir} ${snapshot}
 
@@ -245,14 +245,14 @@ function tpm_inspect {
     local snapshot_file="${FDE_LOG_DIR}/${snapshot}.tar.xz"
     local tmpdir=$(fde_make_tempfile inspect)
     local stop_event=$(bootloader_stop_event)
-    local sys_boot_id="/proc/sys/kernel/random/boot_id"
+    local sys_boot_id="${FDE_PROCFS:-/proc}/sys/kernel/random/boot_id"
     local pcr_out
     local pcr_list
     local mismatch_lines
     local ret
 
     # FIXME use bootloader specific snapshot
-    local grubsnapshot="/sys/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
+    local grubsnapshot="${FDE_SYSFS:-/sys}/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
 
     if [ ! -r ${grubsnapshot} -o ! -r ${snapshot_file} ]; then
 	fde_trace "snapshot not available"

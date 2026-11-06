@@ -117,12 +117,14 @@ function fde_maybe_chroot {
 
 	# If a keyfile was given, we need to strip off the /mnt prefix
 	if [ -n "$keyfile" ]; then
-	    keyfile="${keyfile#$device}"
+	    keyfile="${keyfile#"$device"}"
 	    A+=("--keyfile" "$keyfile")
 	fi
         exec chroot "$device" fdectl "${A[@]}"
     fi
 }
+
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 
 fde_maybe_chroot "$@"
 
@@ -133,7 +135,7 @@ if ! getopt -Q -n fdectl -l "$long_options" -o h -- "$@"; then
     exit 1
 fi
 
-eval set -- $(getopt -n fdectl -l "$long_options" -o h -- "$@")
+eval set -- "$(getopt -n fdectl -l "$long_options" -o h -- "$@")"
 
 command=
 while [ $# -gt 0 ]; do
@@ -196,10 +198,20 @@ if [ -n "$opt_uefi_bootdir" ]; then
     uefi_set_loader "$opt_uefi_bootdir"
 fi
 
-FDE_CONFIG_DIR=/etc/fde
-FDE_LOG_DIR=/var/log/fde
+: ${FDE_CONFIG_DIR:=/etc/fde}
+: ${FDE_LOG_DIR:=/var/log/fde}
+: ${FDE_SYSCONFIG:=/etc/sysconfig/fde-tools}
 
-. /etc/sysconfig/fde-tools
+# Every command needs the settings in this file (PCR list, key size,
+# PBKDF, ...). Do not run with missing or half-loaded settings.
+if [ ! -f "$FDE_SYSCONFIG" ] || [ ! -r "$FDE_SYSCONFIG" ]; then
+    echo "Error: cannot read configuration file $FDE_SYSCONFIG" >&2
+    exit 1
+fi
+if ! . "$FDE_SYSCONFIG"; then
+    echo "Error: failed to load configuration file $FDE_SYSCONFIG" >&2
+    exit 1
+fi
 . "$SHAREDIR/ui/$opt_ui"
 . "$SHAREDIR/util"
 
@@ -217,7 +229,13 @@ if cmd_requires_luks_device; then
     else
 	fsdev=$(luks_device_for_path /)
 	if [ ! -b "$fsdev" ]; then
-	    fde_bad_argument "Unable to determine partition to operate on"
+	    # Test hook: unit tests cannot create block devices, so they
+	    # opt out of this check explicitly. Never set it in production.
+	    if [ "${FDE_TEST_SKIP_BLKDEV_CHECK:-}" = 1 ]; then
+		fde_trace "FDE_TEST_SKIP_BLKDEV_CHECK=1: not checking that $fsdev is a block device"
+	    else
+		fde_bad_argument "Unable to determine partition to operate on"
+	    fi
 	fi
 
 	luks_devices=$(luks_get_volume_for_fsdev "$fsdev")
@@ -226,7 +244,7 @@ if cmd_requires_luks_device; then
 
 	    # Compare the device ID and inode of '/' against the root of PID 1.
 	    # A mismatch indicates a chroot environment.
-	    if [ "$(stat -c %d:%i /)" != "$(stat -c %d:%i /proc/1/root/.)" ]; then
+	    if [ "$(stat -c %d:%i /)" != "$(stat -c %d:%i ${FDE_PROCFS:-/proc}/1/root/.)" ]; then
 		# 'lsblk' may fail to show the filesystem type in a chroot environment
 		# due to incomplete udev db.
 		display_errorbox "Operation not supported in a chroot environment"

@@ -42,7 +42,7 @@ alias bootloader_platform_parameters=grub_platform_parameters
 ##################################################################
 function grub_set_control {
 
-    sysconfig_set_variable /etc/default/grub "$@"
+    sysconfig_set_variable "${FDE_GRUB_DEFAULTS:-/etc/default/grub}" "$@"
 }
 
 ##################################################################
@@ -66,7 +66,9 @@ function grub_set_fde_password {
 ##################################################################
 function grub_get_fde_password {
 
-    . /etc/default/grub
+    if [ -f "${FDE_GRUB_DEFAULTS:-/etc/default/grub}" ]; then
+	. "${FDE_GRUB_DEFAULTS:-/etc/default/grub}"
+    fi
 
     if [ -n "$GRUB_CRYPTODISK_PASSWORD" ]; then
 	echo "$GRUB_CRYPTODISK_PASSWORD"
@@ -77,8 +79,8 @@ function grub_get_fde_password {
     # passphrase directly in the EFI grub.cfg via 'cryptomount -p "..."'
     # instead of GRUB_CRYPTODISK_PASSWORD in /etc/default/grub.
     local pass
-    [ -f /boot/efi/EFI/BOOT/grub.cfg ] || return 1
-    pass=$(sed -n 's/.*cryptomount[[:space:]].*-p[[:space:]]*"\([^"]*\)".*/\1/p' /boot/efi/EFI/BOOT/grub.cfg | head -n1)
+    [ -f "${FDE_ESP_DIR:-/boot/efi}/EFI/BOOT/grub.cfg" ] || return 1
+    pass=$(sed -n 's/.*cryptomount[[:space:]].*-p[[:space:]]*"\([^"]*\)".*/\1/p' "${FDE_ESP_DIR:-/boot/efi}/EFI/BOOT/grub.cfg" | head -n1)
     if [ -n "$pass" ]; then
 	echo "$pass"
 	return 0
@@ -90,8 +92,8 @@ function grub_get_fde_password {
 # Get the configured SRK algorithm from grub.
 function grub_get_srk_alg {
 
-    if [ -f /etc/default/grub ]; then
-	. /etc/default/grub
+    if [ -f "${FDE_GRUB_DEFAULTS:-/etc/default/grub}" ]; then
+	. "${FDE_GRUB_DEFAULTS:-/etc/default/grub}"
     fi
 
     echo "$GRUB_TPM2_SRK_ALG"
@@ -139,14 +141,28 @@ function grub_update_early_config {
     grub_commit_config
 }
 
+##################################################################
+# Path of the shim-install script. The same file is run by
+# grub_commit_config and inspected by grub_rsa_sizes.
+##################################################################
+function grub_shim_install {
+
+    if [ -n "$SHIM_INSTALL" ]; then
+	echo "$SHIM_INSTALL"
+	return 0
+    fi
+
+    command -v shim-install || echo /usr/sbin/shim-install
+}
+
 function grub_commit_config {
 
     extra_opts=
-    if [ "$(ls /boot/efi/EFI)" = "BOOT" ]; then
+    if [ "$(ls "${FDE_ESP_DIR:-/boot/efi}/EFI")" = "BOOT" ]; then
 	extra_opts="--removable"
     fi
 
-    shim-install --no-grub-install $extra_opts
+    "$(grub_shim_install)" --no-grub-install $extra_opts
 }
 
 function grub_enable_fde_authorized_policy {
@@ -330,7 +346,7 @@ function grub_wipe {
 function grub_rsa_sizes {
 
     # Check if the shim-install script supports the SRK algorithm selection.
-    if ! grep -q "GRUB_TPM2_SRK_ALG" "/usr/sbin/shim-install"; then
+    if ! grep -q "GRUB_TPM2_SRK_ALG" "$(grub_shim_install)"; then
 	echo "2048"
 	return 0
     fi

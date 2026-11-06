@@ -68,7 +68,7 @@ function fde_request_recovery_passfile {
 
 function fde_set_variable {
 
-    sysconfig_set_variable /etc/sysconfig/fde-tools "$@"
+    sysconfig_set_variable "${FDE_SYSCONFIG:-/etc/sysconfig/fde-tools}" "$@"
 }
 
 ##################################################################
@@ -79,7 +79,7 @@ function fde_make_tempdir {
     declare -g FDE_TEMP_DIR
 
     if [ -z "$FDE_TEMP_DIR" ]; then
-	FDE_TEMP_DIR=$(mktemp -d -p /dev/shm fde.XXXXXX)
+	FDE_TEMP_DIR=$(mktemp -d -p "${FDE_TMP_PARENT:-/dev/shm}" fde.XXXXXX)
     fi
 }
 
@@ -124,14 +124,38 @@ function sysconfig_set_variable {
     var_name="$2"
     value="$3"
 
-    if ! grep -qs "^[# ]*${var_name}=" $cfg_file; then
-	echo "${var_name}=\"${value}\"" >> $cfg_file
-    else
-	sed -i "s|^[# ]*${var_name}=.*|${var_name}=\"$value\"|" $cfg_file
+    # The name ends up in grep/sed patterns and in declare, so only
+    # accept valid shell variable names.
+    if ! [[ "$var_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+	fde_trace "sysconfig_set_variable: invalid variable name '$var_name'"
+	return 1
     fi
 
-    # Also make the variable visible to subsequent commands
-    declare -g $var_name="$value"
+    # Values are written as VAR="value" on a single line, and the sed
+    # below is line based, so multi-line values cannot be stored.
+    case "$value" in
+    *$'\n'*)
+	fde_trace "sysconfig_set_variable: newline in value of $var_name"
+	return 1;;
+    esac
+
+    local shell_value sed_value
+    # The file gets sourced, so first escape what is special inside
+    # double quotes: \ " $ `
+    shell_value=$(printf '%s' "$value" | sed -e 's/[\\"$`]/\\&/g')
+    # Then escape what is special in a sed replacement: \ & |
+    sed_value=$(printf '%s' "$shell_value" | sed -e 's/[\\&|]/\\&/g')
+
+    if ! grep -qs "^[# ]*${var_name}=" "$cfg_file"; then
+	printf '%s="%s"\n' "$var_name" "$shell_value" >> "$cfg_file"
+    else
+	sed -i "s|^[# ]*${var_name}=.*|${var_name}=\"$sed_value\"|" "$cfg_file"
+    fi
+
+    # Make the new value visible to the rest of this fdectl run, but do
+    # not export it: values such as GRUB_CRYPTODISK_PASSWORD must not
+    # leak into the environment of child processes.
+    declare -g +x -- "$var_name=$value"
 }
 
 ##################################################################

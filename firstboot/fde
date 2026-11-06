@@ -18,19 +18,26 @@
 #
 #   Written by Olaf Kirch <okir@suse.com>
 
-. /etc/sysconfig/fde-tools
+# jeos-firstboot sources this module into its own shell. Use FDE_*
+# names, which cannot clash with jeos-firstboot's own variables, and
+# the same names as fdectl so both read and write the same files.
+: "${FDE_SHAREDIR:=/usr/share/fde}"
+: "${FDE_SYSCONFIG:=/etc/sysconfig/fde-tools}"
+: "${FDE_GRUB_DEFAULTS:=/etc/default/grub}"
 
-. /usr/share/fde/util
-. /usr/share/fde/luks
-. /usr/share/fde/tpm
-. /usr/share/fde/uefi
-. /usr/share/fde/grub2
+. "$FDE_SYSCONFIG"
+
+. "$FDE_SHAREDIR/util"
+. "$FDE_SHAREDIR/luks"
+. "$FDE_SHAREDIR/tpm"
+. "$FDE_SHAREDIR/uefi"
+. "$FDE_SHAREDIR/grub2"
 
 # dialog functions that use the firstboot plumbing
-. /usr/share/fde/ui/dialog
+. "$FDE_SHAREDIR/ui/dialog"
 
-if [ -f /etc/default/grub ]; then
-    . /etc/default/grub
+if [ -f "$FDE_GRUB_DEFAULTS" ]; then
+    . "$FDE_GRUB_DEFAULTS"
 fi
 
 ##################################################################
