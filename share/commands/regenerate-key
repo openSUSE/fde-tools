@@ -37,7 +37,9 @@ function cmd_regenerate_key {
     fi
 
     # Finish TPM key sealing
-    tpm_enable "${luks_devices}"
+    if ! tpm_enable "${luks_devices}"; then
+	return 1
+    fi
 
     # Remove the previous keyslots
     for luks_dev in ${luks_devices}; do
