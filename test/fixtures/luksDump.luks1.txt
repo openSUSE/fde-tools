@@ -1,0 +1,22 @@
+LUKS header information for /dev/fake
+Version:       	1
+Cipher name:   	aes
+Cipher mode:   	xts-plain64
+Hash spec:     	sha256
+Payload offset:	4096
+MK bits:       	512
+MK digest:     	ab cd ef 01 23 45 67 89
+MK salt:       	12 34 56 78 9a bc de f0
+MK iterations: 	1000
+UUID:          	12345678-1234-1234-1234-123456789abc
+
+Key Slot 0: ENABLED
+	Iterations:         	1000
+	Filesystem UUID:    	...
+Key Slot 1: DISABLED
+Key Slot 2: DISABLED
+Key Slot 3: DISABLED
+Key Slot 4: DISABLED
+Key Slot 5: DISABLED
+Key Slot 6: DISABLED
+Key Slot 7: DISABLED

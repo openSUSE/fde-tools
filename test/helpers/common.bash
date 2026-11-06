@@ -59,35 +59,86 @@ assert_equal() {
     fi
 }
 
+assert_line() {
+    if [ "${1:-}" = "--index" ]; then
+        shift
+        local idx="$1"
+        shift
+        local expected="$1"
+        if [ "${lines[$idx]}" != "$expected" ]; then
+            fail "Expected line $idx to be '$expected', got '${lines[$idx]}'. Output:\n$output"
+        fi
+    elif [ "${1:-}" = "--partial" ]; then
+        shift
+        local expected="$1"
+        for line in "${lines[@]}"; do
+            if [[ "$line" == *"$expected"* ]]; then
+                return 0
+            fi
+        done
+        fail "No line partially matched '$expected'. Output:\n$output"
+    else
+        local expected="$1"
+        for line in "${lines[@]}"; do
+            if [ "$line" = "$expected" ]; then
+                return 0
+            fi
+        done
+        fail "No line equal to '$expected'. Output:\n$output"
+    fi
+}
+
 setup_fde_env() {
     export REPO="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
     export TEST_ROOT="$BATS_TEST_TMPDIR/root"
-    mkdir -p "$TEST_ROOT"/{etc/fde,etc/sysconfig,var/log/fde}
+    mkdir -p "$TEST_ROOT"/{etc/fde,etc/default,etc/sysconfig,var/log/fde,boot/efi/EFI/opensuse,dev/shm,sys,proc}
     cp "$REPO/sysconfig.fde" "$TEST_ROOT/etc/sysconfig/fde-tools"
+    touch "$TEST_ROOT/etc/default/grub"
 
-    # Only export variables that the code under test really honors.
-    #  - SHAREDIR: fde.sh and the command files.
-    #  - FDE_CONFIG_DIR, FDE_LOG_DIR: honored by share/tpm and
-    #    share/grub2 when sourced directly. fde.sh still overwrites
-    #    both unconditionally, so CLI tests do not get them.
-    #  - FDE_SYSCONFIG: only used by load_fde_libs below.
-    #
-    # WARNING: these paths are still hard-coded and NOT redirected:
-    #   /etc/sysconfig/fde-tools (fde.sh, fde_set_variable),
-    #   /etc/default/grub (grub_set_control, grub_get_fde_password),
-    #   /boot/efi, /dev/shm (fde_make_tempdir), /sys, /proc.
-    # Do not write tests that reach code touching them until the path
-    # refactoring that makes them overridable has landed. Add the
-    # matching export here in the same commit as that refactoring.
     export SHAREDIR="$REPO/share"
+    # firstboot/fde uses its own name (see the comment there)
+    export FDE_SHAREDIR="$REPO/share"
     export FDE_SYSCONFIG="$TEST_ROOT/etc/sysconfig/fde-tools"
     export FDE_CONFIG_DIR="$TEST_ROOT/etc/fde"
     export FDE_LOG_DIR="$TEST_ROOT/var/log/fde"
+    export FDE_GRUB_DEFAULTS="$TEST_ROOT/etc/default/grub"
+    export FDE_ESP_DIR="$TEST_ROOT/boot/efi"
+    export FDE_TMP_PARENT="$TEST_ROOT/dev/shm"
+    export FDE_SYSFS="$TEST_ROOT/sys"
+    export FDE_PROCFS="$TEST_ROOT/proc"
 
     export MOCK_DIR="$BATS_TEST_TMPDIR/mock"
     export MOCK_LOG="$BATS_TEST_TMPDIR/mock.log"
     mkdir -p "$MOCK_DIR"
     touch "$MOCK_LOG"
+
+    cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
+#!/bin/bash
+if [ -f "$MOCK_DIR/pcr-oracle.err" ]; then
+    cat "$MOCK_DIR/pcr-oracle.err" >&2
+fi
+input=""
+output=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --input) input="$2"; shift 2;;
+    --output) output="$2"; shift 2;;
+    *) shift;;
+    esac
+done
+if [ -n "$output" ]; then
+    if [ -n "$input" ] && [ -f "$input" ]; then
+        cp "$input" "$output"
+    else
+        touch "$output"
+    fi
+fi
+if [ -f "$MOCK_DIR/pcr-oracle.rc" ]; then
+    exit "$(cat "$MOCK_DIR/pcr-oracle.rc")"
+fi
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/pcr-oracle.sh"
 
     export MOCK_BIN_DIR="$BATS_TEST_TMPDIR/mock-bin"
     mkdir -p "$MOCK_BIN_DIR"

@@ -1,0 +1,2 @@
+/dev/sda2 crypto_LUKS
+/dev/sdb2 crypto_LUKS

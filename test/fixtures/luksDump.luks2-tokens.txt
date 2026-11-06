@@ -1,0 +1,42 @@
+LUKS header information
+Version:       	2
+Epoch:         	5
+Metadata area: 	16384 [bytes]
+Keyslots area: 	16744448 [bytes]
+UUID:          	12345678-1234-1234-1234-123456789abc
+Label:         	(no label)
+Subsystem:     	(no subsystem)
+Flags:         	(no flags)
+
+Data segments:
+  0: crypt
+	offset: 16777216 [bytes]
+	length: (whole device)
+	cipher: aes-xts-plain64
+	sector: 512 [bytes]
+
+Keyslots:
+  0: luks2
+	Key:        512 bits
+	Priority:   normal
+	Cipher:     aes-xts-plain64
+  1: luks2
+	Key:        512 bits
+	Priority:   normal
+	Cipher:     aes-xts-plain64
+  10: luks2
+	Key:        512 bits
+	Priority:   normal
+	Cipher:     aes-xts-plain64
+  31: luks2
+	Key:        512 bits
+	Priority:   normal
+	Cipher:     aes-xts-plain64
+Tokens:
+  0: grub-tpm2
+	Keyslot:    1
+  1: systemd-tpm2
+	Keyslot:    10
+Digests:
+  0: pbkdf2
+	Keyslots:   0, 1, 10, 31
