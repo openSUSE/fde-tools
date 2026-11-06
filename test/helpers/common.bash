@@ -94,6 +94,7 @@ setup_fde_env() {
     mkdir -p "$TEST_ROOT"/{etc/fde,etc/default,etc/sysconfig,var/log/fde,boot/efi/EFI/opensuse,dev/shm,sys,proc}
     cp "$REPO/sysconfig.fde" "$TEST_ROOT/etc/sysconfig/fde-tools"
     touch "$TEST_ROOT/etc/default/grub"
+    touch "$TEST_ROOT/boot/efi/EFI/opensuse/shim.efi"
 
     export SHAREDIR="$REPO/share"
     # firstboot/fde uses its own name (see the comment there)
@@ -111,6 +112,8 @@ setup_fde_env() {
     export MOCK_LOG="$BATS_TEST_TMPDIR/mock.log"
     mkdir -p "$MOCK_DIR"
     touch "$MOCK_LOG"
+
+    echo "EFI/opensuse/shim.efi" > "$MOCK_DIR/fde-boot-loader.out"
 
     cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
 #!/bin/bash
@@ -132,6 +135,9 @@ if [ -n "$output" ]; then
     else
         touch "$output"
     fi
+fi
+if [ -n "$input" ] && [ -z "$output" ]; then
+    echo "sha256"
 fi
 if [ -f "$MOCK_DIR/pcr-oracle.rc" ]; then
     exit "$(cat "$MOCK_DIR/pcr-oracle.rc")"
