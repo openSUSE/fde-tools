@@ -70,8 +70,11 @@ check-static:
 check-unit:
 	$(BATS) -r test/unit
 
+check-luks: all
+	$(BATS) -r test/luks
+
 # Placeholders until the matching test suites are added
-check-luks check-c check-root:
+check-c check-root:
 	@echo "$@: no tests yet"
 
 install:: $(TOOLS)

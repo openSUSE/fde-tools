@@ -279,9 +279,10 @@ function luks_drop_other_keyslots {
 	return 1
     fi
     # A TPM slot is one the bootloader reports. bootloader_get_keyslots
-    # (fdectl-grub-tpm2 list --key-only) prints the keyslot ids bare, one
-    # per line. We do not quote the list: "echo" without quotes collapses
-    # the newlines into single spaces so every id becomes " 12 ", and the
+    # (fdectl-grub-tpm2 list --key-only) prints the keyslot ids on one
+    # line, each followed by a space ("0 1 "). We do not quote the list:
+    # "echo" without quotes turns any run of whitespace, spaces or
+    # newlines, into a single space, so every id becomes " 12 ", and the
     # space-bounded substring test keeps id 1 distinct from id 10.
     tpm_slots=" $(echo ${tpm_slots}) "
 
