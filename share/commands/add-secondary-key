@@ -45,11 +45,45 @@ function cmd_add_secondary_key {
     return 0
 }
 
-function init_authorized_policy {
+##################################################################
+# Authorized policy files are created in a staging directory next to
+# the live ones and only moved into place once the new key is sealed.
+# tpm-authorize signs the sealed key in $FDE_CONFIG_DIR with the private
+# key there, and the TPM only accepts the result if both belong to the
+# same policy. Replacing the private key and then failing would break
+# every later tpm-authorize.
+##################################################################
+
+# Print the staging path of a live authorized policy file.
+function _ap_staged {
+
+    echo "$FDE_AP_STAGE_DIR/${1##*/}"
+}
+
+function stage_authorized_policy {
 
     policy_name="$FDE_AUTHORIZED_POLICY"
     if [ -z "$policy_name" ]; then
 	policy_name="$FDE_DEFAULT_AUTHORIZED_POLICY"
+    fi
+
+    tpm_set_authorized_policy_paths "$policy_name"
+
+    # Same file system as the live files, so that moving them into place
+    # is a rename. A directory left by an interrupted run is replaced.
+    declare -g FDE_AP_STAGE_DIR="$FDE_CONFIG_DIR/.${policy_name}.new"
+    rm -rf "$FDE_AP_STAGE_DIR"
+    if ! mkdir -m 700 "$FDE_AP_STAGE_DIR"; then
+	display_errorbox "Failed to create $FDE_AP_STAGE_DIR"
+	return 1
+    fi
+
+    # Keep the existing private key unless it is missing or we are
+    # running regenerate-key (see tpm_create_authorized_policy).
+    if [ -f "$FDE_AP_SECRET_KEY" ] &&
+       ! cp -p "$FDE_AP_SECRET_KEY" "$(_ap_staged "$FDE_AP_SECRET_KEY")"; then
+	display_errorbox "Failed to copy $FDE_AP_SECRET_KEY"
+	return 1
     fi
 
     ##################################################################
@@ -58,12 +92,26 @@ function init_authorized_policy {
     # We also store a copy of the public key in a TPMv2 format so that
     # boot loaders do need a full PEM/ASN.1/bignum library just for
     # loading the pubkey.
-    tpm_set_authorized_policy_paths "$policy_name"
-    tpm_create_authorized_policy $FDE_AP_SECRET_KEY $FDE_AP_AUTHPOLICY $FDE_AP_PUBLIC_KEY
-    if [ $? -ne 0 ]; then
+    if ! tpm_create_authorized_policy "$(_ap_staged "$FDE_AP_SECRET_KEY")" \
+		"$(_ap_staged "$FDE_AP_AUTHPOLICY")" \
+		"$(_ap_staged "$FDE_AP_PUBLIC_KEY")"; then
 	display_errorbox "Failed to create authorized policy"
 	return 1
     fi
+}
+
+function commit_authorized_policy {
+
+    local f
+
+    for f in "$FDE_AP_SECRET_KEY" "$FDE_AP_AUTHPOLICY" \
+	     "$FDE_AP_PUBLIC_KEY" "$FDE_AP_SEALED_SECRET"; do
+	if ! mv -f "$(_ap_staged "$f")" "$f"; then
+	    display_errorbox "Failed to install $f"
+	    return 1
+	fi
+    done
+    rmdir "$FDE_AP_STAGE_DIR"
 
     if [ "$FDE_AUTHORIZED_POLICY" != "$policy_name" ]; then
 	fde_set_variable FDE_AUTHORIZED_POLICY "$policy_name"
@@ -112,18 +160,28 @@ function enroll_tpm_secondary_key {
 
     if [[ "$FDE_USE_AUTHORIZED_POLICIES" =~ y.* ]]; then
 	luks_new_keyfile="$(fde_make_tempfile newkey)"
-	if ! init_authorized_policy || ! add_secondary_key "${luks_devices}" "${luks_new_keyfile}"; then
-	    rm -f "$luks_new_keyfile"
+
+	# add_secondary_key verifies the recovery password before it
+	# changes anything, so the policy files are only touched after that
+	if ! add_secondary_key "${luks_devices}" "${luks_new_keyfile}" ||
+	   ! stage_authorized_policy; then
+	    rm -rf "$luks_new_keyfile" "$FDE_AP_STAGE_DIR"
 	    return 1
 	fi
 
-	if ! tpm_seal_secret "$luks_new_keyfile" "$FDE_AP_SEALED_SECRET" "$FDE_AP_AUTHPOLICY"; then
+	if ! tpm_seal_secret "$luks_new_keyfile" \
+		"$(_ap_staged "$FDE_AP_SEALED_SECRET")" \
+		"$(_ap_staged "$FDE_AP_AUTHPOLICY")"; then
 	    display_errorbox "Failed to seal secondary LUKS key against TPM Authorized Policy"
-	    rm -f "$luks_new_keyfile"
+	    rm -rf "$luks_new_keyfile" "$FDE_AP_STAGE_DIR"
 	    return 1
 	fi
-
 	rm -f "$luks_new_keyfile"
+
+	if ! commit_authorized_policy; then
+	    rm -rf "$FDE_AP_STAGE_DIR"
+	    return 1
+	fi
     else
 	if [ -z "$opt_keyfile" ]; then
 	    opt_keyfile="${FDE_CONFIG_DIR:-/etc/fde}/root.key"
