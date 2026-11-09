@@ -12,6 +12,33 @@ teardown() {
     teardown_fde_env
 }
 
+# Set up AP mode with an existing policy whose files have known content.
+_setup_ap_policy() {
+    echo 'FDE_USE_AUTHORIZED_POLICIES="yes"' >> "$FDE_SYSCONFIG"
+    echo 'FDE_AUTHORIZED_POLICY="default"' >> "$FDE_SYSCONFIG"
+    mkdir -p "$FDE_CONFIG_DIR/default" "$FDE_ESP_DIR/EFI/opensuse"
+    echo "OLD-secret-key" > "$FDE_CONFIG_DIR/default/secret-key.pem"
+    echo "OLD-authorized-policy" > "$FDE_CONFIG_DIR/default/authorized-policy.tpm"
+    echo "OLD-public-key" > "$FDE_CONFIG_DIR/default/public-key.tpm"
+    echo "OLD-sealed" > "$FDE_CONFIG_DIR/default/sealed.tpm"
+    echo "OLD-esp-sealed" > "$FDE_ESP_DIR/EFI/opensuse/sealed.tpm"
+}
+
+# Fail unless the policy files still hold their _setup_ap_policy content.
+_assert_ap_policy_unchanged() {
+    assert_equal "$(cat "$FDE_CONFIG_DIR/default/secret-key.pem")" "OLD-secret-key"
+    assert_equal "$(cat "$FDE_CONFIG_DIR/default/authorized-policy.tpm")" "OLD-authorized-policy"
+    assert_equal "$(cat "$FDE_CONFIG_DIR/default/public-key.tpm")" "OLD-public-key"
+    assert_equal "$(cat "$FDE_CONFIG_DIR/default/sealed.tpm")" "OLD-sealed"
+}
+
+# Fail if a staging directory was left in $FDE_CONFIG_DIR.
+_assert_no_staging_dir() {
+    local left
+    left=$(find "$FDE_CONFIG_DIR" -maxdepth 1 -name '.*.new')
+    [ -z "$left" ] || fail "staging directory left behind: $left"
+}
+
 @test "CMD-P01: passwd verifies old password, sets new password, and exits 0" {
     echo "current_pass" > "$TEST_ROOT/old.key"
     echo 0 > "$MOCK_DIR/cryptsetup.rc"
@@ -329,17 +356,8 @@ EOF
 }
 
 @test "CMD-RK01: regenerate-key rolls key, updates sealed secret, and wipes old keyslot" {
-    echo 'FDE_USE_AUTHORIZED_POLICIES="yes"' >> "$FDE_SYSCONFIG"
-    echo 'FDE_AUTHORIZED_POLICY="default"' >> "$FDE_SYSCONFIG"
+    _setup_ap_policy
     echo "recovery_pass" > "$TEST_ROOT/rec.key"
-
-    mkdir -p "$FDE_CONFIG_DIR/default"
-    touch "$FDE_CONFIG_DIR/default/secret-key.pem"
-    touch "$FDE_CONFIG_DIR/default/authorized-policy.tpm"
-    touch "$FDE_CONFIG_DIR/default/public-key.tpm"
-    touch "$FDE_CONFIG_DIR/default/sealed.tpm"
-
-    mkdir -p "$FDE_ESP_DIR/EFI/opensuse"
     echo 0 > "$MOCK_DIR/cryptsetup.rc"
 
     # Simulate old keyslot 1
@@ -349,9 +367,20 @@ EOF
     assert_success
     assert_mock_called "cryptsetup.*luksAddKey.* /dev/sda"
     assert_mock_called "cryptsetup luksKillSlot -q /dev/sda 1"
+
+    # The new policy and key are in place, the staging directory is gone
+    local new_key
+    new_key=$(cat "$FDE_CONFIG_DIR/default/secret-key.pem")
+    [[ "$new_key" == mock-private-key-* ]] || fail "private key not regenerated: $new_key"
+    assert_equal "$(cat "$FDE_CONFIG_DIR/default/authorized-policy.tpm")" "mock-authorized-policy"
+    assert_equal "$(cat "$FDE_CONFIG_DIR/default/public-key.tpm")" "mock-public-key"
+    [ "$(cat "$FDE_CONFIG_DIR/default/sealed.tpm")" != "OLD-sealed" ] ||
+        fail "sealed key not replaced"
+    _assert_no_staging_dir
 }
 
-@test "CMD-RK02: regenerate-key aborts before altering slots if recovery password fails" {
+@test "CMD-RK02: regenerate-key aborts before altering slots or policy if recovery password fails" {
+    _setup_ap_policy
     echo "wrong_pass" > "$TEST_ROOT/wrong.key"
     echo 1 > "$MOCK_DIR/cryptsetup.rc"
 
@@ -360,20 +389,18 @@ EOF
     assert_mock_called "cryptsetup open --test-passphrase.* /dev/sda"
     assert_mock_not_called "luksAddKey"
     assert_mock_not_called "luksKillSlot"
+
+    # The private key must not be regenerated before the password is
+    # verified: tpm-authorize would then sign the old sealed key with a
+    # key the TPM does not accept for it.
+    assert_mock_not_called "pcr-oracle"
+    _assert_ap_policy_unchanged
+    _assert_no_staging_dir
 }
 
 @test "CMD-RK03: regenerate-key preserves old keyslots if tpm_enable fails" {
-    echo 'FDE_USE_AUTHORIZED_POLICIES="yes"' >> "$FDE_SYSCONFIG"
-    echo 'FDE_AUTHORIZED_POLICY="default"' >> "$FDE_SYSCONFIG"
+    _setup_ap_policy
     echo "recovery_pass" > "$TEST_ROOT/rec.key"
-
-    mkdir -p "$FDE_CONFIG_DIR/default"
-    touch "$FDE_CONFIG_DIR/default/secret-key.pem"
-    touch "$FDE_CONFIG_DIR/default/authorized-policy.tpm"
-    touch "$FDE_CONFIG_DIR/default/public-key.tpm"
-    touch "$FDE_CONFIG_DIR/default/sealed.tpm"
-
-    mkdir -p "$FDE_ESP_DIR/EFI/opensuse"
 
     # Simulate old keyslot 1
     echo "1" > "$MOCK_DIR/fdectl-grub-tpm2.out"
@@ -386,26 +413,7 @@ for arg in "$@"; do
         exit 1
     fi
 done
-input=""
-output=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-    --input) input="$2"; shift 2;;
-    --output) output="$2"; shift 2;;
-    *) shift;;
-    esac
-done
-if [ -n "$output" ]; then
-    if [ -n "$input" ] && [ -f "$input" ]; then
-        cp "$input" "$output"
-    else
-        touch "$output"
-    fi
-fi
-if [ -n "$input" ] && [ -z "$output" ]; then
-    echo "sha256"
-fi
-exit 0
+exec "$MOCK_DIR/pcr-oracle.default.sh" "$@"
 EOF
     chmod +x "$MOCK_DIR/pcr-oracle.sh"
     echo 0 > "$MOCK_DIR/cryptsetup.rc"
@@ -413,6 +421,100 @@ EOF
     run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/rec.key" regenerate-key
     assert_failure 1
     assert_mock_called "cryptsetup.*luksAddKey.* /dev/sda"
+    # It really failed at signing, after the new key was enrolled
+    assert_mock_called "pcr-oracle .* sign "
     # Old keyslot must NOT be killed!
     assert_mock_not_called "luksKillSlot"
+    # The key the boot loader uses is untouched
+    assert_equal "$(cat "$FDE_ESP_DIR/EFI/opensuse/sealed.tpm")" "OLD-esp-sealed"
+}
+
+@test "CMD-RK04: regenerate-key leaves policy and old slots untouched if sealing fails" {
+    _setup_ap_policy
+    echo "recovery_pass" > "$TEST_ROOT/rec.key"
+    echo 0 > "$MOCK_DIR/cryptsetup.rc"
+    echo "1" > "$MOCK_DIR/fdectl-grub-tpm2.out"
+
+    cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
+#!/bin/bash
+for arg in "$@"; do
+    if [ "$arg" = "seal-secret" ]; then
+        exit 1
+    fi
+done
+exec "$MOCK_DIR/pcr-oracle.default.sh" "$@"
+EOF
+    chmod +x "$MOCK_DIR/pcr-oracle.sh"
+
+    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/rec.key" regenerate-key
+    assert_failure 1
+    assert_output --partial "Failed to seal secondary LUKS key"
+    # The new LUKS key was added before sealing; it stays as an unused
+    # slot (removed by the next successful regenerate-key)
+    assert_mock_called "luksAddKey"
+    assert_mock_not_called "luksKillSlot"
+    _assert_ap_policy_unchanged
+    _assert_no_staging_dir
+}
+
+@test "CMD-RK05: regenerate-key leaves policy untouched if adding the LUKS key fails" {
+    _setup_ap_policy
+    echo "recovery_pass" > "$TEST_ROOT/rec.key"
+    echo "1" > "$MOCK_DIR/fdectl-grub-tpm2.out"
+
+    # The recovery password verifies, luksAddKey fails
+    cat << 'EOF' > "$MOCK_DIR/cryptsetup.sh"
+#!/bin/bash
+for arg in "$@"; do
+    if [ "$arg" = "luksAddKey" ]; then
+        exit 1
+    fi
+done
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/cryptsetup.sh"
+
+    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/rec.key" regenerate-key
+    assert_failure 1
+    assert_output --partial "Failed to add secondary LUKS key"
+    assert_mock_not_called "luksKillSlot"
+    _assert_ap_policy_unchanged
+    _assert_no_staging_dir
+}
+
+@test "CMD-ASK02: add-secondary-key in AP mode creates the policy files and records the policy" {
+    echo 'FDE_USE_AUTHORIZED_POLICIES="yes"' >> "$FDE_SYSCONFIG"
+    sed -i '/^FDE_AUTHORIZED_POLICY=/d' "$FDE_SYSCONFIG"
+    echo "recovery_pass" > "$TEST_ROOT/rec.key"
+    echo 0 > "$MOCK_DIR/cryptsetup.rc"
+
+    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/rec.key" add-secondary-key
+    assert_success
+    assert_mock_called "pcr-oracle .*--rsa-generate-key"
+    assert_mock_called "cryptsetup.*luksAddKey.* /dev/sda"
+
+    local dir="$FDE_CONFIG_DIR/authorized-policy"
+    [[ "$(cat "$dir/secret-key.pem")" == mock-private-key-* ]]
+    assert_equal "$(cat "$dir/authorized-policy.tpm")" "mock-authorized-policy"
+    assert_equal "$(cat "$dir/public-key.tpm")" "mock-public-key"
+    [ -s "$dir/sealed.tpm" ] || fail "sealed key missing or empty"
+    _assert_no_staging_dir
+
+    . "$FDE_SYSCONFIG"
+    assert_equal "$FDE_AUTHORIZED_POLICY" "authorized-policy"
+}
+
+@test "CMD-RK06: regenerate-key replaces a staging directory left by an interrupted run" {
+    _setup_ap_policy
+    echo "recovery_pass" > "$TEST_ROOT/rec.key"
+    echo 0 > "$MOCK_DIR/cryptsetup.rc"
+    echo "1" > "$MOCK_DIR/fdectl-grub-tpm2.out"
+    mkdir -p "$FDE_CONFIG_DIR/.default.new"
+    echo "stale" > "$FDE_CONFIG_DIR/.default.new/secret-key.pem"
+    echo "stale" > "$FDE_CONFIG_DIR/.default.new/leftover"
+
+    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/rec.key" regenerate-key
+    assert_success
+    [[ "$(cat "$FDE_CONFIG_DIR/default/secret-key.pem")" == mock-private-key-* ]]
+    _assert_no_staging_dir
 }

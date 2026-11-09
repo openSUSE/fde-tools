@@ -115,17 +115,30 @@ setup_fde_env() {
 
     echo "EFI/opensuse/shim.efi" > "$MOCK_DIR/fde-boot-loader.out"
 
-    cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
+    # Default pcr-oracle behaviour: write the files the real tool writes.
+    # Tests that replace pcr-oracle.sh can still hand the calls they do
+    # not care about to this handler: exec "$MOCK_DIR/pcr-oracle.default.sh" "$@"
+    cat << 'EOF' > "$MOCK_DIR/pcr-oracle.default.sh"
 #!/bin/bash
 if [ -f "$MOCK_DIR/pcr-oracle.err" ]; then
     cat "$MOCK_DIR/pcr-oracle.err" >&2
 fi
 input=""
 output=""
+private_key=""
+policy=""
+public_key=""
+generate=""
+action=""
 while [ $# -gt 0 ]; do
     case "$1" in
     --input) input="$2"; shift 2;;
     --output) output="$2"; shift 2;;
+    --private-key) private_key="$2"; shift 2;;
+    --authorized-policy) policy="$2"; shift 2;;
+    --public-key) public_key="$2"; shift 2;;
+    --rsa-generate-key) generate=1; shift;;
+    create-authorized-policy|store-public-key|seal-secret|sign) action="$1"; shift;;
     *) shift;;
     esac
 done
@@ -136,6 +149,17 @@ if [ -n "$output" ]; then
         touch "$output"
     fi
 fi
+# A new private key gets distinct content, so tests can tell whether
+# the key was regenerated
+if [ -n "$generate" ] && [ -n "$private_key" ]; then
+    echo "mock-private-key-$(date +%s%N)-$RANDOM" > "$private_key"
+fi
+if [ "$action" = create-authorized-policy ] && [ -n "$policy" ]; then
+    echo "mock-authorized-policy" > "$policy"
+fi
+if [ "$action" = store-public-key ] && [ -n "$public_key" ]; then
+    echo "mock-public-key" > "$public_key"
+fi
 if [ -n "$input" ] && [ -z "$output" ]; then
     echo "sha256"
 fi
@@ -144,7 +168,8 @@ if [ -f "$MOCK_DIR/pcr-oracle.rc" ]; then
 fi
 exit 0
 EOF
-    chmod +x "$MOCK_DIR/pcr-oracle.sh"
+    chmod +x "$MOCK_DIR/pcr-oracle.default.sh"
+    cp "$MOCK_DIR/pcr-oracle.default.sh" "$MOCK_DIR/pcr-oracle.sh"
 
     export MOCK_BIN_DIR="$BATS_TEST_TMPDIR/mock-bin"
     mkdir -p "$MOCK_BIN_DIR"
