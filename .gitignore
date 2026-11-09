@@ -8,3 +8,4 @@ fde-boot-loader
 kiwi*.log
 LOG
 *.so
+man/fdectl.8
