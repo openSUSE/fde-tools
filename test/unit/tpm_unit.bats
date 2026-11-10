@@ -71,6 +71,22 @@ EOF
     run tpm_get_rsa_key_size
     assert_success
     assert_output "3072"
+
+    # All probed sizes fail -> fallback to 2048
+    unset __fde_rsa_key_size
+    grub_rsa_sizes() { echo "4096 3072"; }
+    cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
+#!/bin/bash
+if [ "$1" = "--rsa-bits" ]; then
+    exit 1
+fi
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/pcr-oracle.sh"
+    run tpm_get_rsa_key_size
+    assert_success
+    assert_output --partial "2048"
+    assert_output --partial "Failed to find a valid RSA key size"
 }
 
 @test "UT-T03: tpm_get_ecc_srk_support handles unrecognized option, explicit yes/no, and auto probe" {
@@ -104,6 +120,14 @@ EOF
     run tpm_get_ecc_srk_support
     assert_success
     assert_output "yes"
+
+    # Auto: ecc-test fails -> "no"
+    unset __fde_ecc_srk
+    FDE_ECC_SRK="auto"
+    echo 1 > "$MOCK_DIR/pcr-oracle.rc"
+    run tpm_get_ecc_srk_support
+    assert_success
+    assert_output "no"
 }
 
 @test "UT-T04: tpm_get_srk_alg parses output from pcr-oracle load-test" {
@@ -118,7 +142,7 @@ if [ "$1" = "load-test" ]; then
     exit 0
 fi
 if [ "$1" = "--input" ]; then
-    echo "sha256"
+    echo "RSA2048"
     exit 0
 fi
 exit 0
@@ -127,7 +151,22 @@ EOF
 
     run tpm_get_srk_alg "$keyfile"
     assert_success
-    assert_output "sha256"
+    assert_output "RSA2048"
+
+    # Failure from pcr-oracle load-test -> rc 1
+    unset __fde_srk_alg
+    rm -f "$MOCK_DIR/pcr-oracle.sh"
+    echo 1 > "$MOCK_DIR/pcr-oracle.rc"
+    run tpm_get_srk_alg "$keyfile"
+    assert_failure 1
+
+    # Empty output from load-test -> rc 1
+    unset __fde_srk_alg
+    rm -f "$MOCK_DIR/pcr-oracle.sh"
+    echo 0 > "$MOCK_DIR/pcr-oracle.rc"
+    echo "" > "$MOCK_DIR/pcr-oracle.out"
+    run tpm_get_srk_alg "$keyfile"
+    assert_failure 1
 
     # Missing file returns 1
     unset __fde_srk_alg
@@ -149,6 +188,28 @@ EOF
     tpm_seal_key "$secret" "$sealed"
     assert_mock_called "--ecc-srk"
     assert_mock_called "--persistent-srk 0x81000001"
+
+    # Negative case: no ECC and no persistent SRK
+    tpm_get_ecc_srk_support() { echo "no"; }
+    unset FDE_TPM_PERSISTENT_SRK
+    : > "$MOCK_LOG"
+    tpm_seal_key "$secret" "$sealed"
+    assert_mock_not_called "--ecc-srk"
+    assert_mock_not_called "--persistent-srk"
+
+    # Legacy case: pcr-oracle lacks --target-platform -> --key-format tpm2.0
+    cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
+#!/bin/bash
+if [ "$1" = "--target-platform" ]; then
+    echo "pcr-oracle: unrecognized option '--target-platform'" >&2
+    exit 1
+fi
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/pcr-oracle.sh"
+    run tpm_platform_parameters
+    assert_success
+    assert_output "--key-format tpm2.0"
 }
 
 @test "UT-T06: tpm_seal_secret removes partial sealed file on failure" {
@@ -237,6 +298,19 @@ EOF
     : > "$MOCK_LOG"
     tpm_create_authorized_policy "$key" "$pol" ""
     assert_mock_called "--rsa-generate-key"
+
+    # --rsa-bits only passed when != 2048
+    rm -f "$key"
+    tpm_get_rsa_key_size() { echo "2048"; }
+    : > "$MOCK_LOG"
+    tpm_create_authorized_policy "$key" "$pol" ""
+    assert_mock_not_called "--rsa-bits"
+
+    rm -f "$key"
+    tpm_get_rsa_key_size() { echo "3072"; }
+    : > "$MOCK_LOG"
+    tpm_create_authorized_policy "$key" "$pol" ""
+    assert_mock_called "--rsa-bits 3072"
 }
 
 @test "UT-T09: tpm_snapshot skips if log dir missing; creates tar.xz if present" {
@@ -269,6 +343,11 @@ EOF
 
     tpm_snapshot
     [ -f "$FDE_LOG_DIR/test-snapshot.tar.xz" ]
+
+    local contents
+    contents=$(tar tf "$FDE_LOG_DIR/test-snapshot.tar.xz")
+    [[ "$contents" == *"test-snapshot/predicted-pcr.txt"* ]] || fail "missing predicted-pcr.txt in snapshot tar"
+    [[ "$contents" == *"test-snapshot/boot_id"* ]] || fail "missing boot_id in snapshot tar"
 }
 
 @test "UT-T10: tpm_inspect matches snapshot or detects mismatch" {
@@ -289,11 +368,11 @@ EOF
     assert_success
     assert_output --partial "Sealed PCR matching the current settings"
 
-    # Case 2: Mismatch but matching boot ID
+    # Case 2: Mismatch but matching boot ID -> authorized for next boot
     cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
 #!/bin/bash
 if [ "$1" = "--from" ]; then
-    echo "PCR 7: MISMATCH" >&2
+    echo "PCR:7 MISMATCH" >&2
     exit 1
 fi
 exit 0
@@ -302,9 +381,28 @@ EOF
     run tpm_inspect
     assert_success
     assert_output --partial "Sealed key authorized for the next boot"
+
+    # Case 3: Mismatch and differing boot ID -> lists PCR usage
+    echo "different-boot-id" > "$FDE_PROCFS/sys/kernel/random/boot_id"
+    run tpm_inspect
+    assert_output --partial "PCR mismatch detected"
+    assert_output --partial "* PCR 7: [UEFI] Secure Boot Policy"
+
+    # Case 4: Missing snapshot file -> rc 1
+    rm -f "$FDE_LOG_DIR/test-inspect.tar.xz"
+    run tpm_inspect
+    assert_failure 1
+    assert_output --partial "snapshot not available"
 }
 
 @test "UT-T11: tpm_pcr_usage returns standard descriptions for PCRs 0 to 14" {
+    local i
+    for i in {0..14}; do
+        run tpm_pcr_usage "$i"
+        assert_success
+        [ -n "$output" ] || fail "empty description for PCR $i"
+    done
+
     run tpm_pcr_usage 0
     assert_success
     assert_output "[UEFI] Core system firmware executable code"

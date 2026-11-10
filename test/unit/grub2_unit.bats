@@ -31,7 +31,7 @@ teardown() {
     assert_success
     assert_output "embedded_test_password"
 
-    # Case 3: Neither exists or no password embedded
+    # Case 3: Neither GRUB_CRYPTODISK_PASSWORD nor cryptomount password exists
     cp "$REPO/test/fixtures/grub.cfg.no-pw" "$FDE_ESP_DIR/EFI/BOOT/grub.cfg"
     run grub_get_fde_password
     assert_failure 1
@@ -79,26 +79,26 @@ teardown() {
 
 @test "UT-G05: grub_repair_srk_alg no-op when equal, updates and commits when differ" {
     mkdir -p "$FDE_ESP_DIR/EFI/opensuse"
-    echo 'GRUB_TPM2_SRK_ALG="sha256"' > "$FDE_GRUB_DEFAULTS"
+    echo 'GRUB_TPM2_SRK_ALG="RSA2048"' > "$FDE_GRUB_DEFAULTS"
 
-    # Mock tpm_get_srk_alg returning sha256 (matches)
-    tpm_get_srk_alg() { echo "sha256"; return 0; }
+    # Mock tpm_get_srk_alg returning RSA2048 (matches)
+    tpm_get_srk_alg() { echo "RSA2048"; return 0; }
     : > "$MOCK_LOG"
     run grub_repair_srk_alg "dummy.key"
     assert_success
     assert_mock_not_called "shim-install"
 
-    # Now mock returning sha384 (differs)
-    tpm_get_srk_alg() { echo "sha384"; return 0; }
+    # Now mock returning ECC (differs)
+    tpm_get_srk_alg() { echo "ECC"; return 0; }
     run grub_repair_srk_alg "dummy.key"
     assert_success
     . "$FDE_GRUB_DEFAULTS"
-    assert_equal "$GRUB_TPM2_SRK_ALG" "sha384"
+    assert_equal "$GRUB_TPM2_SRK_ALG" "ECC"
     assert_mock_called "shim-install"
 
     # If commit fails, grub_repair_srk_alg returns 1
     echo 1 > "$MOCK_DIR/shim-install.rc"
-    tpm_get_srk_alg() { echo "sha512"; return 0; }
+    tpm_get_srk_alg() { echo "RSA3072"; return 0; }
     run grub_repair_srk_alg "dummy.key"
     assert_failure 1
 }
@@ -146,6 +146,12 @@ teardown() {
     echo 1 > "$MOCK_DIR/tpm2key-tool.rc"
     run grub_check_sealed_key
     assert_failure 1
+
+    # tpm2key-tool missing fallback -> rc 0
+    rm -f "$MOCK_BIN_DIR/tpm2key-tool"
+    run grub_check_sealed_key
+    assert_success
+    ln -sf "$REPO/test/mocks/bin/stub" "$MOCK_BIN_DIR/tpm2key-tool"
 }
 
 @test "UT-G07: grub_remove_keyslots removes explicit or detected slots and cleans" {

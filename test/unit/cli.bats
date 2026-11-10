@@ -160,12 +160,14 @@ teardown() {
     echo "/dev/sda1 ext4" > "$MOCK_DIR/lsblk.out"
 
     # Match PID 1 root inode so chroot error is not triggered
-    mkdir -p "$FDE_PROCFS/1/root"
-    ln -sfn / "$FDE_PROCFS/1/root/." 2>/dev/null || true
+    mkdir -p "$FDE_PROCFS/1"
+    rm -rf "$FDE_PROCFS/1/root"
+    ln -s / "$FDE_PROCFS/1/root"
 
     run bash "$REPO/fde.sh" passwd
     assert_failure 1
     assert_output --partial "Cannot find the underlying partition"
+    refute_output --partial "Operation not supported in a chroot environment"
 }
 
 @test "CLI-17: fdectl detects chroot environment when root partition lookup fails" {
@@ -177,48 +179,138 @@ teardown() {
 
     # Create dummy inode for PID 1 root that differs from host /
     mkdir -p "$FDE_PROCFS/1/root"
-    touch "$FDE_PROCFS/1/root/different_inode"
 
     run bash "$REPO/fde.sh" passwd
     assert_failure 1
+    assert_output --partial "Cannot find the underlying partition"
     assert_output --partial "Operation not supported in a chroot environment"
 }
 
 @test "CLI-18: fdectl commands not requiring devices bypass device detection" {
     echo 0 > "$MOCK_DIR/pcr-oracle.rc"
+
+    # 1. tpm-present
     run bash "$REPO/fde.sh" tpm-present
+    assert_success
+    assert_mock_not_called "^df "
+    assert_mock_not_called "^lsblk "
+
+    # 2. tpm-authorize
+    echo 'FDE_USE_AUTHORIZED_POLICIES="yes"' >> "$FDE_SYSCONFIG"
+    echo 'FDE_AUTHORIZED_POLICY="default"' >> "$FDE_SYSCONFIG"
+    mkdir -p "$FDE_CONFIG_DIR/default"
+    touch "$FDE_CONFIG_DIR/default/sealed.tpm"
+    touch "$FDE_CONFIG_DIR/default/secret-key.pem"
+    mkdir -p "$FDE_ESP_DIR/EFI/opensuse"
+    touch "$FDE_ESP_DIR/EFI/opensuse/sealed.tpm"
+
+    run bash "$REPO/fde.sh" tpm-authorize
+    assert_success
+    assert_mock_not_called "^df "
+    assert_mock_not_called "^lsblk "
+
+    # 3. tpm-inspect
+    local snapdir="$TEST_ROOT/snap_build"
+    mkdir -p "$snapdir/tpm-snapshot"
+    mkdir -p "$FDE_PROCFS/sys/kernel/random"
+    echo "test-boot-id" > "$snapdir/tpm-snapshot/boot_id"
+    echo "test-boot-id" > "$FDE_PROCFS/sys/kernel/random/boot_id"
+    tar Jcf "$FDE_LOG_DIR/tpm-snapshot.tar.xz" -C "$snapdir" tpm-snapshot
+    mkdir -p "$FDE_SYSFS/firmware/efi/efivars"
+    touch "$FDE_SYSFS/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
+
+    run bash "$REPO/fde.sh" tpm-inspect
     assert_success
     assert_mock_not_called "^df "
     assert_mock_not_called "^lsblk "
 }
 
 @test "CLI-19: fdectl cleans up temporary directory on exit and signals" {
-    # Check cleanup on normal exit
+    # Case 1: Check cleanup on normal exit
     echo 0 > "$MOCK_DIR/pcr-oracle.rc"
     run bash "$REPO/fde.sh" tpm-present
     assert_success
-    # Ensure no leftover temp directories under FDE_TMP_PARENT
     [ "$(find "$FDE_TMP_PARENT" -maxdepth 1 -name 'fde.*' | wc -l)" -eq 0 ]
 
-    # Check cleanup on error exit
-    run bash "$REPO/fde.sh" invalid_command
+    # Case 2: Check cleanup on command error exit (after util is sourced and tempfile created)
+    cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
+#!/bin/bash
+exit 1
+EOF
+    chmod +x "$MOCK_DIR/pcr-oracle.sh"
+    run bash "$REPO/fde.sh" tpm-present
     assert_failure 1
     [ "$(find "$FDE_TMP_PARENT" -maxdepth 1 -name 'fde.*' | wc -l)" -eq 0 ]
+
+    # Case 3: Check cleanup on SIGTERM
+    cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
+#!/bin/bash
+# Sleep long enough for test to observe tempdir and send SIGTERM
+sleep 2
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/pcr-oracle.sh"
+
+    bash "$REPO/fde.sh" tpm-present &
+    local fde_pid=$!
+
+    # Wait up to 1 second for fde.sh to create its tempdir
+    local waited=0
+    while [ "$(find "$FDE_TMP_PARENT" -maxdepth 1 -name 'fde.*' | wc -l)" -eq 0 ] && [ "$waited" -lt 10 ]; do
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+
+    # Verify tempdir existed during execution
+    [ "$(find "$FDE_TMP_PARENT" -maxdepth 1 -name 'fde.*' | wc -l)" -gt 0 ] ||
+        fail "tempdir was not created before signal"
+
+    kill -TERM "$fde_pid" 2>/dev/null || true
+    wait "$fde_pid" 2>/dev/null || true
+
+    # Verify tempdir was cleaned up by the trap
+    [ "$(find "$FDE_TMP_PARENT" -maxdepth 1 -name 'fde.*' | wc -l)" -eq 0 ] ||
+        fail "tempdir was not cleaned up on SIGTERM"
 }
 
 @test "CLI-20: fdectl preserves passwords with spaces, quotes, and metacharacters" {
-    . "$SHAREDIR/ui/shell"
-    . "$SHAREDIR/util"
-    local complex_pw='p@ss w0rd;$(reboot)"'\''special'
-    opt_password="$complex_pw"
-    unset __fde_cached_recovery_password
-    fde_request_recovery_password
-    assert_equal "$result_password" "$complex_pw"
+    echo 'FDE_DEVS="/dev/sda"' >> "$FDE_SYSCONFIG"
 
-    # Verify getopt inside fde.sh accepts complex passwords without error
-    echo 0 > "$MOCK_DIR/pcr-oracle.rc"
-    run bash "$REPO/fde.sh" --password "$complex_pw" tpm-present
+    # Mock cryptsetup to capture the exact keyfile contents passed to it
+    cat << 'EOF' > "$MOCK_DIR/cryptsetup.sh"
+#!/bin/bash
+keyfile=""
+while [ $# -gt 0 ]; do
+    if [ "$1" = "--key-file" ]; then
+        keyfile="$2"
+        shift 2
+        continue
+    fi
+    shift
+done
+if [ -n "$keyfile" ] && [ -f "$keyfile" ]; then
+    cp "$keyfile" "$MOCK_DIR/captured.key"
+fi
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/cryptsetup.sh"
+
+    local pwned_marker="$TEST_ROOT/pwned"
+    rm -f "$pwned_marker"
+    local complex_pw="a  b * \$(touch \"$pwned_marker\")"
+
+    run bash "$REPO/fde.sh" --password "$complex_pw" passwd << 'EOF'
+newpass
+newpass
+EOF
     assert_success
+
+    # The command substitution must NOT have executed
+    [ ! -f "$pwned_marker" ] || fail "Command injection occurred: $pwned_marker was created"
+
+    # The exact bytes, including consecutive spaces and literal '*', must reach cryptsetup
+    [ -f "$MOCK_DIR/captured.key" ] || fail "No keyfile reached cryptsetup"
+    assert_equal "$(cat "$MOCK_DIR/captured.key")" "$complex_pw"
 }
 
 @test "CLI-21: fdectl refuses a root source that is not a block device" {

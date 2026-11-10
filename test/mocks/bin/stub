@@ -2,7 +2,11 @@
 cmd=$(basename "$0")
 
 if [ -n "$MOCK_LOG" ]; then
-    echo "$cmd $*" >> "$MOCK_LOG"
+    printf '%s' "$cmd" >> "$MOCK_LOG"
+    if [ $# -gt 0 ]; then
+        printf ' %q' "$@" >> "$MOCK_LOG"
+    fi
+    printf '\n' >> "$MOCK_LOG"
 fi
 
 if [ -n "$MOCK_DIR" ]; then

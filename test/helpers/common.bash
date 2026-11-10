@@ -51,6 +51,27 @@ assert_output() {
     fi
 }
 
+refute_output() {
+    if [ "${1:-}" = "--partial" ]; then
+        shift
+        local unexpected="$1"
+        if [[ "$output" == *"$unexpected"* ]]; then
+            fail "Expected output to NOT contain '$unexpected'.\nActual output:\n$output"
+        fi
+    elif [ "${1:-}" = "--regexp" ]; then
+        shift
+        local pattern="$1"
+        if [[ "$output" =~ $pattern ]]; then
+            fail "Expected output to NOT match regex '$pattern'.\nActual output:\n$output"
+        fi
+    else
+        local unexpected="$1"
+        if [ "$output" = "$unexpected" ]; then
+            fail "Expected output to NOT be '$unexpected'.\nActual output:\n$output"
+        fi
+    fi
+}
+
 assert_equal() {
     local actual="$1"
     local expected="$2"
