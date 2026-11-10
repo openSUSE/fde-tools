@@ -242,14 +242,18 @@ EOF
     assert_failure 1
     [ "$(find "$FDE_TMP_PARENT" -maxdepth 1 -name 'fde.*' | wc -l)" -eq 0 ]
 
-    # Case 3: Check cleanup on SIGTERM
+    # Case 3: Check cleanup on SIGTERM and that execution halts immediately
     cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
 #!/bin/bash
-# Sleep long enough for test to observe tempdir and send SIGTERM
-sleep 2
-exit 0
+if [ "$1" = "self-test" ]; then
+    sleep 2
+    exit 0
+fi
+echo "$@" >> "$MOCK_DIR/post_signal_calls.log"
+exec "$MOCK_DIR/pcr-oracle.default.sh" "$@"
 EOF
     chmod +x "$MOCK_DIR/pcr-oracle.sh"
+    rm -f "$MOCK_DIR/post_signal_calls.log"
 
     bash "$REPO/fde.sh" tpm-present &
     local fde_pid=$!
@@ -271,6 +275,10 @@ EOF
     # Verify tempdir was cleaned up by the trap
     [ "$(find "$FDE_TMP_PARENT" -maxdepth 1 -name 'fde.*' | wc -l)" -eq 0 ] ||
         fail "tempdir was not cleaned up on SIGTERM"
+
+    # Verify that fdectl stopped and did not continue running subsequent commands
+    [ ! -f "$MOCK_DIR/post_signal_calls.log" ] ||
+        fail "Commands continued running after SIGTERM: $(cat "$MOCK_DIR/post_signal_calls.log")"
 }
 
 @test "CLI-20: fdectl preserves passwords with spaces, quotes, and metacharacters" {
