@@ -72,8 +72,10 @@ teardown() {
     uefi_secure_boot_enabled() { return 0; }
     d() { return 1; }
 
-    run fde_choose_protection
-    assert_failure 1
+    FDE_PROTECTION="previous_selection"
+    local rc=0
+    fde_choose_protection || rc=$?
+    assert_equal "$rc" "1"
     assert_equal "$FDE_PROTECTION" ""
 }
 
@@ -120,7 +122,10 @@ teardown() {
     tpm_test() { return 0; }
     luks_verify_password() { return 0; }
     luks_change_password() { result_password="new_recovery_pass"; return 0; }
-    luks_drop_other_keyslots() { return 0; }
+    luks_drop_other_keyslots() {
+        echo "luks_drop_other_keyslots dev=$1 passfile_content=$(cat "$2")" >> "$MOCK_LOG"
+        return 0
+    }
     luks_reencrypt() { return 0; }
 
     FDE_PROTECTION="pass tpm"
@@ -137,6 +142,9 @@ teardown() {
     run fde_setup_encrypted "/dev/mapper/cr_root" "$imager_key" "builtin_pass"
     assert_success
 
+    # Verify luks_drop_other_keyslots received the new password
+    assert_mock_called "luks_drop_other_keyslots dev=/dev/sda2 passfile_content=new_recovery_pass"
+
     # Verify fdectl regenerate-key was invoked with passfile
     assert_mock_called "fdectl regenerate-key --passfile"
     assert_mock_called "systemctl enable fde-tpm-enroll.service"
@@ -147,6 +155,55 @@ teardown() {
     [ ! -f "$imager_key" ] || fail "imager keyfile was not removed"
     [ ! -f "$FDE_DRACUT_CONF" ] || fail "dracut conf was not removed"
     assert_equal "$(cat "$FDE_CRYPTTAB")" "cr_root /dev/sda2 /.virtual-root.key"
+}
+
+@test "FB-06: fde_setup_encrypted on transactional system uses transactional-update" {
+    . "$REPO/firstboot/fde"
+
+    luks_get_underlying_device() { echo "/dev/sda2"; }
+    tpm_test() { return 0; }
+    luks_verify_password() { return 0; }
+    luks_change_password() { result_password="new_recovery_pass"; return 0; }
+    luks_drop_other_keyslots() { return 0; }
+    luks_reencrypt() { return 0; }
+
+    FDE_PROTECTION="pass tpm"
+    mkdir -p "$FDE_BOOT_WRITABLE"
+    : > "$MOCK_LOG"
+
+    run fde_setup_encrypted "/dev/mapper/cr_root" "" "builtin_pass"
+    assert_success
+
+    assert_mock_called "transactional-update initrd grub.cfg"
+    assert_mock_called "transactional-update apply"
+    assert_mock_not_called "dracut -f"
+    assert_mock_not_called "grub2-mkconfig"
+}
+
+@test "FB-06: fde_setup_encrypted detects kiwi pre-reencrypted partition and skips reencrypt" {
+    . "$REPO/firstboot/fde"
+
+    luks_get_underlying_device() { echo "/dev/sda2"; }
+    tpm_test() { return 0; }
+    luks_verify_password() { return 0; }
+    luks_change_password() { result_password="new_recovery_pass"; return 0; }
+    luks_drop_other_keyslots() { return 0; }
+    local reencrypt_called=0
+    luks_reencrypt() { reencrypt_called=1; return 0; }
+
+    FDE_PROTECTION="pass"
+    # lsinitrd outputs checksum matching kiwi pre-reencrypted header
+    echo "sum-kiwi-differs" > "$MOCK_DIR/lsinitrd.out"
+
+    mkdir -p "$(dirname "$FDE_LUKS_HEADER")"
+
+    run fde_setup_encrypted "/dev/mapper/cr_root" "" "builtin_pass"
+    assert_success
+
+    assert_mock_called "cryptsetup luksHeaderBackup /dev/sda2 --header-backup-file $FDE_LUKS_HEADER"
+    # is_reencrypted was set to true because checksum differed, so luks_reencrypt was skipped
+    [ "$reencrypt_called" -eq 0 ] || fail "luks_reencrypt was unexpectedly called"
+    [ ! -f "$FDE_LUKS_HEADER" ] || fail "temporary luks header was not removed"
 }
 
 @test "FB-07: fde_setup_encrypted with password-only boot calls fde_protect_notpm" {
@@ -212,4 +269,70 @@ teardown() {
     assert_success
     assert_mock_called "dracut --force"
     [ ! -f "$FDE_CRYPTTAB" ] || fail "crypttab was not removed"
+}
+
+@test "FB-11: fde_setup_encrypted aborts safely without dropping slots or credentials if password change fails" {
+    . "$REPO/firstboot/fde"
+
+    local drop_marker="$TEST_ROOT/unexpected_drop_called"
+    rm -f "$drop_marker"
+
+    luks_get_underlying_device() { echo "/dev/sda2"; }
+    luks_verify_password() { return 0; }
+    luks_change_password() { return 1; } # Fails
+    luks_drop_other_keyslots() { touch "$drop_marker"; return 0; }
+    luks_drop_key() { touch "$drop_marker"; return 0; }
+
+    FDE_PROTECTION="pass"
+
+    local imager_key="$TEST_ROOT/imager.key"
+    echo "imager_random_secret" > "$imager_key"
+    mkdir -p "$(dirname "$FDE_DRACUT_CONF")"
+    touch "$FDE_DRACUT_CONF"
+    mkdir -p "$(dirname "$FDE_CRYPTTAB")"
+    echo "cr_root /dev/sda2 $imager_key" > "$FDE_CRYPTTAB"
+
+    run fde_setup_encrypted "/dev/mapper/cr_root" "$imager_key" "builtin_pass"
+    assert_failure 1
+    assert_output --partial "Failed to change recovery password."
+
+    # Verify no keyslot drop helpers were called
+    [ ! -f "$drop_marker" ] || fail "keyslot drop helper was unexpectedly called when password change failed"
+
+    # Imager key, dracut conf, and crypttab must be preserved untouched
+    [ -f "$imager_key" ] || fail "imager keyfile was unexpectedly deleted"
+    [ -f "$FDE_DRACUT_CONF" ] || fail "dracut conf was unexpectedly deleted"
+    assert_equal "$(cat "$FDE_CRYPTTAB")" "cr_root /dev/sda2 $imager_key"
+}
+
+@test "FB-12: fde_setup_encrypted aborts before deleting imager key if luks_drop_other_keyslots fails" {
+    . "$REPO/firstboot/fde"
+
+    luks_get_underlying_device() { echo "/dev/sda2"; }
+    tpm_test() { return 0; }
+    luks_verify_password() { return 0; }
+    luks_change_password() { result_password="new_recovery_pass"; return 0; }
+    luks_drop_other_keyslots() { return 1; } # Fails
+
+    FDE_PROTECTION="pass tpm"
+
+    local imager_key="$TEST_ROOT/imager.key"
+    echo "imager_random_secret" > "$imager_key"
+    mkdir -p "$(dirname "$FDE_DRACUT_CONF")"
+    touch "$FDE_DRACUT_CONF"
+    mkdir -p "$(dirname "$FDE_CRYPTTAB")"
+    echo "cr_root /dev/sda2 $imager_key" > "$FDE_CRYPTTAB"
+    : > "$MOCK_LOG"
+
+    run fde_setup_encrypted "/dev/mapper/cr_root" "$imager_key" "builtin_pass"
+    assert_failure 1
+    assert_output --partial "Failed to remove initial random key"
+
+    # Must abort before deleting imager key, dracut conf, or updating crypttab
+    [ -f "$imager_key" ] || fail "imager keyfile was unexpectedly deleted"
+    [ -f "$FDE_DRACUT_CONF" ] || fail "dracut conf was unexpectedly deleted"
+    assert_equal "$(cat "$FDE_CRYPTTAB")" "cr_root /dev/sda2 $imager_key"
+
+    # Must not have reached fdectl regenerate-key
+    assert_mock_not_called "fdectl"
 }
