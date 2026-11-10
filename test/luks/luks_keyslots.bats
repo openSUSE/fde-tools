@@ -5,9 +5,6 @@ load ../helpers/luks.bash
 setup() {
     load_bats_libs
     setup_luks_env
-    # Ensure function calls in share/luks resolve to bootloader_get_keyslots
-    unalias bootloader_get_keyslots 2>/dev/null || true
-    bootloader_get_keyslots() { grub_get_keyslots "$@"; }
 }
 
 teardown() {
@@ -77,6 +74,45 @@ teardown() {
 
     # Orphan slot should be killed
     run cryptsetup open --test-passphrase --key-file "$orphan_key" "$img"
+    assert_failure
+}
+
+@test "LK-09: luks_drop_other_keyslots distinguishes keyslot 1 from keyslot 10" {
+    local img="$TEST_ROOT/luks_slot10.img"
+    make_luks_image "$img" "recovery_pass"
+
+    local rec_key slot1_key slot10_key
+    rec_key=$(luks_write_password rec "recovery_pass")
+    slot1_key="$TEST_ROOT/slot1.key"
+    slot10_key="$TEST_ROOT/slot10.key"
+    luks_generate_random_key "$slot1_key"
+    luks_generate_random_key "$slot10_key"
+
+    # Add explicit slot 1 and slot 10
+    cryptsetup --batch-mode --key-file "$rec_key" luksAddKey --key-slot 1 \
+        --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "$img" "$slot1_key"
+    cryptsetup --batch-mode --key-file "$rec_key" luksAddKey --key-slot 10 \
+        --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "$img" "$slot10_key"
+
+    # Protect only slot 10 via TPM; slot 1 must NOT match by substring
+    unalias bootloader_get_keyslots 2>/dev/null || true
+    bootloader_get_keyslots() { echo "10 "; return 0; }
+
+    rec_key=$(luks_write_password rec "recovery_pass")
+    run luks_drop_other_keyslots "$img" "$rec_key"
+    assert_success
+
+    # Recovery slot 0 still unlocks
+    rec_key=$(luks_write_password rec "recovery_pass")
+    run luks_verify_password "$img" "$rec_key"
+    assert_success
+
+    # TPM slot 10 is preserved and still unlocks
+    run cryptsetup open --test-passphrase --key-file "$slot10_key" "$img"
+    assert_success
+
+    # Slot 1 was dropped and fails to unlock
+    run cryptsetup open --test-passphrase --key-file "$slot1_key" "$img"
     assert_failure
 }
 

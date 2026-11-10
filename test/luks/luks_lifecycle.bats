@@ -165,11 +165,25 @@ teardown() {
 
 @test "LK-07: luks_generate_random_key creates file of exact configured size" {
     local keyfile="$TEST_ROOT/gen.key"
+    local keyfile2="$TEST_ROOT/gen2.key"
     FDE_KEY_SIZE_BYTES=32
 
     luks_generate_random_key "$keyfile"
     [ -f "$keyfile" ]
     assert_equal "$(stat -c %s "$keyfile")" "32"
+
+    # Verify that two generated keys differ
+    luks_generate_random_key "$keyfile2"
+    assert_equal "$(stat -c %s "$keyfile2")" "32"
+    [ "$(cat "$keyfile")" != "$(cat "$keyfile2")" ] || fail "Generated keys are identical"
+
+    # Enroll the generated key and verify it opens the test volume
+    local img="$TEST_ROOT/test.luks"
+    make_luks_image "$img" "rec_pw"
+    printf '%s' "rec_pw" > "$TEST_ROOT/rec.key"
+    luks_add_key "$img" "$TEST_ROOT/rec.key" "$keyfile"
+    run cryptsetup open --test-passphrase --key-file "$keyfile" "$img"
+    assert_success
 
     FDE_KEY_SIZE_BYTES=64
     luks_generate_random_key "$keyfile"
