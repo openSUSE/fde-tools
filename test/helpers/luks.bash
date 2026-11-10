@@ -63,6 +63,12 @@ require_fdectl_grub_tpm2() {
     fi
 }
 
+require_token_plugin() {
+    if [ ! -f "$REPO/libcryptsetup-token-grub-tpm2.so" ]; then
+        skip "libcryptsetup-token-grub-tpm2.so is not built (run make)"
+    fi
+}
+
 # Print the value of FIELD (e.g. "PBKDF", "Iterations", "Time cost")
 # of keyslot SLOT, as shown by cryptsetup luksDump.
 luks_slot_field() {

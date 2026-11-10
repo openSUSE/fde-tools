@@ -129,3 +129,30 @@ teardown() {
     assert_success
     assert_output --partial "0 1"
 }
+
+@test "C-T06: libcryptsetup-token-grub-tpm2 token import, dump, and validation" {
+    require_token_plugin
+
+    local img="$TEST_ROOT/luks.img"
+    make_luks_image "$img" "test_pass"
+
+    # 1. Valid token import with external token plugin
+    run bash -c "echo '{\"type\":\"grub-tpm2\",\"keyslots\":[\"0\"],\"timestamp\":\"2026-11-10T12:00:00Z\"}' | cryptsetup token import --external-tokens-path '$REPO' '$img'"
+    assert_success
+
+    # 2. Dump tokens with external plugin outputs custom timestamp
+    run cryptsetup luksDump --external-tokens-path "$REPO" "$img"
+    assert_success
+    assert_output --partial "timestamp:  2026-11-10T12:00:00Z"
+
+    # 3. Invalid JSON is rejected
+    run bash -c "echo 'not a valid json' | cryptsetup token import --external-tokens-path '$REPO' '$img'"
+    assert_failure
+
+    # 4. JSON with missing type or non-array keyslots is rejected
+    run bash -c "echo '{\"keyslots\":[\"0\"]}' | cryptsetup token import --external-tokens-path '$REPO' '$img'"
+    assert_failure
+
+    run bash -c "echo '{\"type\":\"grub-tpm2\",\"keyslots\":\"0\"}' | cryptsetup token import --external-tokens-path '$REPO' '$img'"
+    assert_failure
+}
