@@ -27,6 +27,9 @@
 : "${FDE_CRYPTTAB:=/etc/crypttab}"
 : "${FDE_DRACUT_CONF:=/etc/dracut.conf.d/99-luks-boot.conf}"
 : "${FDE_GRUB_CFG:=/boot/grub2/grub.cfg}"
+: "${FDE_BOOT_WRITABLE:=/boot/writable}"
+: "${FDE_INITRD:=/boot/initrd}"
+: "${FDE_LUKS_HEADER:=/root/.luks.header}"
 
 . "$FDE_SYSCONFIG"
 
@@ -134,16 +137,16 @@ function fde_setup_encrypted {
 
     # bsc#1244323 lsinitrd may not be able to deal with the symlink properly.
     # To avoid the potential error, always use the real path to the initrd.
-    sys_initrd="`readlink -f /boot/initrd`"
+    sys_initrd="`readlink -f "${FDE_INITRD}"`"
 
     # KIWI may save sha256sum of the LUKS header in initrd before reencrypting
     # the root partition. If the checksum differs from the one of the current
     # LUKS header, the root partition is already reencryted.
     luks_hdr_sum_kiwi="`lsinitrd --file root/.luks.header ${sys_initrd}`"
     if [ "${luks_hdr_sum_kiwi}" != "" ]; then
-	cryptsetup luksHeaderBackup ${luks_dev} --header-backup-file /root/.luks.header
-	luks_hdr_sum_cur="`sha256sum /root/.luks.header | cut -f1 -d' '`"
-	rm -f /root/.luks.header
+	cryptsetup luksHeaderBackup ${luks_dev} --header-backup-file "${FDE_LUKS_HEADER}"
+	luks_hdr_sum_cur="`sha256sum "${FDE_LUKS_HEADER}" | cut -f1 -d' '`"
+	rm -f "${FDE_LUKS_HEADER}"
 
 	if [ "${luks_hdr_sum_cur}" != "${luks_hdr_sum_kiwi}" ]; then
 	    is_reencrypted=true
@@ -253,7 +256,7 @@ function fde_setup_encrypted {
     rm -f ${pass_keyfile}
 
     # Update initrd and /boot/grub2/grub.cfg
-    if test -d "/boot/writable"; then
+    if test -d "${FDE_BOOT_WRITABLE}"; then
 	transactional-update initrd grub.cfg
 	transactional-update apply
     else
