@@ -125,6 +125,9 @@ setup_fde_env() {
     export FDE_LOG_DIR="$TEST_ROOT/var/log/fde"
     export FDE_GRUB_DEFAULTS="$TEST_ROOT/etc/default/grub"
     export FDE_ESP_DIR="$TEST_ROOT/boot/efi"
+    export FDE_CRYPTTAB="$TEST_ROOT/etc/crypttab"
+    export FDE_DRACUT_CONF="$TEST_ROOT/etc/dracut.conf.d/99-luks-boot.conf"
+    export FDE_GRUB_CFG="$TEST_ROOT/boot/grub2/grub.cfg"
     export FDE_TMP_PARENT="$TEST_ROOT/dev/shm"
     export FDE_SYSFS="$TEST_ROOT/sys"
     export FDE_PROCFS="$TEST_ROOT/proc"
@@ -197,6 +200,7 @@ EOF
     local mock_commands=(
         cryptsetup pcr-oracle fdectl-grub-tpm2 shim-install grub2-protect
         tpm2key-tool fde-boot-loader mokutil lsblk df dialog logger chroot
+        fdectl systemctl dracut grub2-mkconfig lsinitrd transactional-update
     )
     for cmd in "${mock_commands[@]}"; do
         ln -sf "$REPO/test/mocks/bin/stub" "$MOCK_BIN_DIR/$cmd"
