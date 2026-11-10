@@ -161,7 +161,7 @@ if [ "$action" = store-public-key ] && [ -n "$public_key" ]; then
     echo "mock-public-key" > "$public_key"
 fi
 if [ -n "$input" ] && [ -z "$output" ]; then
-    echo "sha256"
+    echo "RSA2048"
 fi
 if [ -f "$MOCK_DIR/pcr-oracle.rc" ]; then
     exit "$(cat "$MOCK_DIR/pcr-oracle.rc")"

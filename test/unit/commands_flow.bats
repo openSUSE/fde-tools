@@ -170,6 +170,15 @@ EOF
     assert_mock_called "cryptsetup.*luksRemoveKey.* /dev/sda"
     assert_mock_called "shim-install --no-grub-install"
 
+    # Verify that firstboot password was removed before signing
+    local rm_line sign_line
+    rm_line=$(grep -n "luksRemoveKey" "$MOCK_LOG" | head -n 1 | cut -d: -f1)
+    sign_line=$(grep -n "pcr-oracle.*sign" "$MOCK_LOG" | head -n 1 | cut -d: -f1)
+    [ -n "$rm_line" ] || fail "luksRemoveKey not found in mock log"
+    [ -n "$sign_line" ] || fail "pcr-oracle sign not found in mock log"
+    [ "$rm_line" -lt "$sign_line" ] ||
+        fail "luksRemoveKey (line $rm_line) did not run before pcr-oracle sign (line $sign_line)"
+
     local pass
     pass=$(sed -n 's/^GRUB_CRYPTODISK_PASSWORD="\(.*\)"/\1/p' "$FDE_GRUB_DEFAULTS")
     [ -z "$pass" ]
@@ -225,6 +234,11 @@ EOF
     assert_success
     assert_mock_called "cryptsetup.*luksChangeKey.* /dev/sda"
     assert_mock_called "shim-install --no-grub-install"
+
+    [ -f "$FDE_ESP_DIR/EFI/opensuse/sealed.tpm" ] || fail "sealed.tpm not found on ESP"
+    local key
+    key=$(sed -n 's/^GRUB_TPM2_SEALED_KEY="\(.*\)"/\1/p' "$FDE_GRUB_DEFAULTS")
+    [ "$key" = "sealed.tpm" ]
 }
 
 @test "CMD-TE05: tpm-enable with FDE_ENROLL_NEW_KEY unsets variable on success" {
@@ -268,6 +282,19 @@ EOF
     local pass
     pass=$(sed -n 's/^GRUB_CRYPTODISK_PASSWORD="\(.*\)"/\1/p' "$FDE_GRUB_DEFAULTS")
     [ -z "$pass" ]
+}
+
+@test "CMD-TE08: tpm-enable in AP mode refused if FDE_ENROLL_NEW_KEY is set" {
+    echo 'FDE_USE_AUTHORIZED_POLICIES="yes"' >> "$FDE_SYSCONFIG"
+    echo 'FDE_AUTHORIZED_POLICY="default"' >> "$FDE_SYSCONFIG"
+    echo "FDE_ENROLL_NEW_KEY=\"$FDE_CONFIG_DIR/root.key\"" >> "$FDE_SYSCONFIG"
+
+    run bash "$REPO/fde.sh" tpm-enable
+    assert_failure 1
+    assert_output --partial "Bad, there's a secondary key in $FDE_CONFIG_DIR/root.key"
+    assert_mock_not_called "luksRemoveKey"
+    assert_mock_not_called "pcr-oracle.*sign"
+    assert_mock_called "shim-install --no-grub-install"
 }
 
 @test "CMD-TA01: tpm-activate skips activation when key sealed and no firstboot password" {
@@ -341,6 +368,24 @@ EOF
     [ -z "$key" ]
 }
 
+@test "CMD-TD01: tpm-disable with wrong recovery password aborts leaving sealed key intact" {
+    echo "wrong_pass" > "$TEST_ROOT/wrong.key"
+    mkdir -p "$FDE_ESP_DIR/EFI/opensuse"
+    echo "keep_sealed" > "$FDE_ESP_DIR/EFI/opensuse/sealed.tpm"
+    echo 'GRUB_TPM2_SEALED_KEY="EFI/opensuse/sealed.tpm"' >> "$FDE_GRUB_DEFAULTS"
+    echo 1 > "$MOCK_DIR/cryptsetup.rc"
+
+    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/wrong.key" tpm-disable
+    assert_failure 1
+    assert_mock_called "cryptsetup open --test-passphrase.* /dev/sda"
+    assert_mock_not_called "shim-install"
+    assert_equal "$(cat "$FDE_ESP_DIR/EFI/opensuse/sealed.tpm")" "keep_sealed"
+
+    local key
+    key=$(sed -n 's/^GRUB_TPM2_SEALED_KEY="\(.*\)"/\1/p' "$FDE_GRUB_DEFAULTS")
+    [ "$key" = "EFI/opensuse/sealed.tpm" ]
+}
+
 @test "CMD-TW01: tpm-wipe disables TPM and wipes grub-tpm2 keyslots" {
     echo "rec_pass" > "$TEST_ROOT/rec.key"
     mkdir -p "$FDE_ESP_DIR/EFI/opensuse"
@@ -358,15 +403,53 @@ EOF
 @test "CMD-RK01: regenerate-key rolls key, updates sealed secret, and wipes old keyslot" {
     _setup_ap_policy
     echo "recovery_pass" > "$TEST_ROOT/rec.key"
-    echo 0 > "$MOCK_DIR/cryptsetup.rc"
 
-    # Simulate old keyslot 1
-    echo "1" > "$MOCK_DIR/fdectl-grub-tpm2.out"
+    # Mock cryptsetup: when luksAddKey runs, output "Key slot 2 created."
+    cat << 'EOF' > "$MOCK_DIR/cryptsetup.sh"
+#!/bin/bash
+for arg in "$@"; do
+    if [ "$arg" = "luksAddKey" ]; then
+        echo "Key slot 2 created."
+        exit 0
+    fi
+done
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/cryptsetup.sh"
+
+    # Mock fdectl-grub-tpm2: starts with slot 1; when slot 2 is added, answers "1 2"
+    cat << 'EOF' > "$MOCK_DIR/fdectl-grub-tpm2.sh"
+#!/bin/bash
+slot_file="$MOCK_DIR/slots_state"
+[ -f "$slot_file" ] || echo "1" > "$slot_file"
+
+if [ "$1" = "add" ]; then
+    shift
+    while [ $# -gt 0 ]; do
+        if [ "$1" = "--key-slot" ]; then
+            echo "$(cat "$slot_file") $2" > "$slot_file"
+            break
+        fi
+        shift
+    done
+    exit 0
+elif [ "$1" = "list" ]; then
+    cat "$slot_file"
+    exit 0
+fi
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/fdectl-grub-tpm2.sh"
 
     run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/rec.key" regenerate-key
     assert_success
     assert_mock_called "cryptsetup.*luksAddKey.* /dev/sda"
+    assert_mock_called "fdectl-grub-tpm2 add --key-slot 2 /dev/sda"
+
+    # Verify slot 1 was killed exactly once and new slot 2 was never killed
     assert_mock_called "cryptsetup luksKillSlot -q /dev/sda 1"
+    assert_equal "$(grep -c "luksKillSlot.* 1" "$MOCK_LOG")" "1"
+    assert_mock_not_called "luksKillSlot.* 2"
 
     # The new policy and key are in place, the staging directory is gone
     local new_key
@@ -482,6 +565,39 @@ EOF
     _assert_no_staging_dir
 }
 
+@test "CMD-ASK01: add-secondary-key in PCR mode enrolls key and records FDE_ENROLL_NEW_KEY" {
+    echo 'FDE_USE_AUTHORIZED_POLICIES="no"' >> "$FDE_SYSCONFIG"
+    echo "recovery_pass" > "$TEST_ROOT/rec.key"
+    echo 0 > "$MOCK_DIR/cryptsetup.rc"
+
+    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/rec.key" add-secondary-key
+    assert_success
+    assert_mock_called "cryptsetup open --test-passphrase.* /dev/sda"
+    assert_mock_called "cryptsetup.*luksAddKey.* /dev/sda"
+    [ -f "$FDE_CONFIG_DIR/root.key" ] || fail "root.key not created"
+
+    . "$FDE_SYSCONFIG"
+    assert_equal "$FDE_ENROLL_NEW_KEY" "$FDE_CONFIG_DIR/root.key"
+}
+
+@test "CMD-ASK03: add-secondary-key refused if FDE_ENROLL_NEW_KEY set or keyslot exists" {
+    echo "FDE_ENROLL_NEW_KEY=\"$FDE_CONFIG_DIR/root.key\"" >> "$FDE_SYSCONFIG"
+
+    run bash "$REPO/fde.sh" add-secondary-key
+    assert_failure 1
+    assert_output --partial "already tried to enroll a secondary key"
+    assert_mock_not_called "cryptsetup"
+
+    # Now unset FDE_ENROLL_NEW_KEY but simulate existing keyslot
+    sed -i '/^FDE_ENROLL_NEW_KEY=/d' "$FDE_SYSCONFIG"
+    echo "0" > "$MOCK_DIR/fdectl-grub-tpm2.out"
+
+    run bash "$REPO/fde.sh" add-secondary-key
+    assert_failure 1
+    assert_output --partial "already enrolled a secondary key"
+    assert_mock_not_called "cryptsetup"
+}
+
 @test "CMD-ASK02: add-secondary-key in AP mode creates the policy files and records the policy" {
     echo 'FDE_USE_AUTHORIZED_POLICIES="yes"' >> "$FDE_SYSCONFIG"
     sed -i '/^FDE_AUTHORIZED_POLICY=/d' "$FDE_SYSCONFIG"
@@ -517,4 +633,67 @@ EOF
     assert_success
     [[ "$(cat "$FDE_CONFIG_DIR/default/secret-key.pem")" == mock-private-key-* ]]
     _assert_no_staging_dir
+}
+
+@test "CMD-TP01: tpm-present checks TPM self-test and sealing round-trip" {
+    echo 0 > "$MOCK_DIR/pcr-oracle.rc"
+
+    run bash "$REPO/fde.sh" tpm-present
+    assert_success
+    assert_mock_called "pcr-oracle self-test"
+    assert_mock_called "pcr-oracle .* sign "
+    assert_mock_called "pcr-oracle .* unseal-secret"
+
+    # Simulate self-test failure
+    echo 1 > "$MOCK_DIR/pcr-oracle.rc"
+    run bash "$REPO/fde.sh" tpm-present
+    assert_failure 1
+
+    # Simulate recovered key mismatch: unseal outputs different data
+    echo 0 > "$MOCK_DIR/pcr-oracle.rc"
+    cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
+#!/bin/bash
+out=""
+action=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --output) out="$2"; shift 2;;
+    unseal-secret) action="$1"; shift;;
+    *) shift;;
+    esac
+done
+if [ "$action" = "unseal-secret" ] && [ -n "$out" ]; then
+    echo "corrupted-recovered-key" > "$out"
+    exit 0
+fi
+exec "$MOCK_DIR/pcr-oracle.default.sh" "$@"
+EOF
+    chmod +x "$MOCK_DIR/pcr-oracle.sh"
+
+    run bash "$REPO/fde.sh" tpm-present
+    assert_failure 1
+    assert_output --partial "Unable to recover original secret"
+}
+
+@test "CMD-TI01: tpm-inspect delegates to tpm_inspect and verifies snapshot" {
+    # When log dir is missing or has no snapshot, fails
+    run bash "$REPO/fde.sh" tpm-inspect
+    assert_failure 1
+    assert_output --partial "snapshot not available"
+
+    # When snapshot and grub snapshot exist and match current measurements, succeeds
+    local snapdir="$TEST_ROOT/snap_build"
+    mkdir -p "$snapdir/tpm-snapshot"
+    mkdir -p "$FDE_PROCFS/sys/kernel/random"
+    echo "test-boot-id" > "$snapdir/tpm-snapshot/boot_id"
+    echo "test-boot-id" > "$FDE_PROCFS/sys/kernel/random/boot_id"
+    tar Jcf "$FDE_LOG_DIR/tpm-snapshot.tar.xz" -C "$snapdir" tpm-snapshot
+
+    mkdir -p "$FDE_SYSFS/firmware/efi/efivars"
+    touch "$FDE_SYSFS/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
+    echo 0 > "$MOCK_DIR/pcr-oracle.rc"
+
+    run bash "$REPO/fde.sh" tpm-inspect
+    assert_success
+    assert_output --partial "Sealed PCR matching the current settings"
 }
