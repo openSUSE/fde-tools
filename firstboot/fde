@@ -24,6 +24,9 @@
 : "${FDE_SHAREDIR:=/usr/share/fde}"
 : "${FDE_SYSCONFIG:=/etc/sysconfig/fde-tools}"
 : "${FDE_GRUB_DEFAULTS:=/etc/default/grub}"
+: "${FDE_CRYPTTAB:=/etc/crypttab}"
+: "${FDE_DRACUT_CONF:=/etc/dracut.conf.d/99-luks-boot.conf}"
+: "${FDE_GRUB_CFG:=/boot/grub2/grub.cfg}"
 
 . "$FDE_SYSCONFIG"
 
@@ -210,13 +213,15 @@ function fde_setup_encrypted {
 	rm -f "${luks_keyfile}"
 
 	# Remove the dracut conf for the key file
-	rm -f /etc/dracut.conf.d/99-luks-boot.conf
+	rm -f "$FDE_DRACUT_CONF"
 
 	# Replace the key file path in /etc/crypttab with
 	# "/.virtual-root.key" to avoid errors when unmounting the LUKS
 	# partition (bsc#1218181). The path must not be on / itself, which is
 	# read-only on SL Micro.
-	sed -i "s,${luks_keyfile},/.virtual-root.key,g" /etc/crypttab
+	if [ -f "$FDE_CRYPTTAB" ]; then
+		sed -i "s,${luks_keyfile},/.virtual-root.key,g" "$FDE_CRYPTTAB"
+	fi
 
 	luks_keyfile=""
     fi
@@ -253,7 +258,7 @@ function fde_setup_encrypted {
 	transactional-update apply
     else
 	dracut -f
-	grub2-mkconfig -o /boot/grub2/grub.cfg
+	grub2-mkconfig -o "$FDE_GRUB_CFG"
     fi
 
     if $with_pass || $with_tpm || $with_ccid; then
@@ -296,7 +301,7 @@ function fde_setup_unencrypted {
     fi
 
     rm -f "${luks_keyfile}"
-    rm -f /etc/crypttab
+    rm -f "$FDE_CRYPTTAB"
 
     display_infobox "Re-creating initial ramdisk"
     if ! dracut --force >&2; then
