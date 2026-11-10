@@ -56,7 +56,7 @@ all:: $(TOOLS) $(SUBDIRS) $(TOKEN_PLUGINS)
 BATS            ?= bats
 SHELLCHECK      ?= shellcheck
 
-check: check-static check-unit
+check: check-static check-unit check-c
 
 SHELL_SOURCES	= fde.sh $(_LIBSCRIPTS) firstboot/fde rpm-build/$(TPM_HELPER)
 
@@ -73,8 +73,15 @@ check-unit:
 check-luks: all
 	$(BATS) -r test/luks
 
+check-c: fde-boot-loader
+	@if command -v gcc >/dev/null 2>&1 || command -v clang >/dev/null 2>&1; then \
+		$(MAKE) -C test/c check; \
+	else \
+		echo "check-c: compiler not found, skipping C unit tests"; \
+	fi
+
 # Placeholders until the matching test suites are added
-check-c check-root:
+check-root:
 	@echo "$@: no tests yet"
 
 install:: $(TOOLS)
@@ -117,6 +124,7 @@ clean:
 	rm -f $(TOOLS)
 	rm -f $(TOKEN_PLUGINS)
 	rm -rf build
+	@if [ -f test/c/Makefile ]; then $(MAKE) -C test/c clean; fi
 
 fde-token: build/fde-token.o
 	$(CC) -o $@ $< $(FIDO_LINK)
@@ -124,8 +132,8 @@ fde-token: build/fde-token.o
 fdectl-grub-tpm2: build/fdectl-grub-tpm2.o
 	$(CC) -o $@ $< $(CRPYT_LINK)
 
-fde-boot-loader: build/fde-boot-loader.o
-	$(CC) -o $@ $< $(EFIVAR_LINK)
+fde-boot-loader: build/fde-boot-loader.o build/fde-boot-loader-parse.o
+	$(CC) -o $@ $^ $(EFIVAR_LINK)
 
 libcryptsetup-token-grub-tpm2.so: build/cryptsetup/cryptsetup-token-grub-tpm2.o
 	$(CC) -o $@ $< $(TOKEN_LINK) -shared -Wl,--version-script=$(TOKEN_ABI_PATH)
