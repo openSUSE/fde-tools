@@ -18,10 +18,10 @@
 #
 #   Written by Gary Lin <glin@suse.com>
 
-CRYPTTAB="/etc/crypttab"
-FDE_SYSCONFIG="/etc/sysconfig/fde-tools"
-GRUB2_DEFAULT="/etc/default/grub"
-FDECTL="/usr/sbin/fdectl"
+: "${CRYPTTAB:=/etc/crypttab}"
+: "${FDE_SYSCONFIG:=/etc/sysconfig/fde-tools}"
+: "${GRUB2_DEFAULT:=/etc/default/grub}"
+: "${FDECTL:=/usr/sbin/fdectl}"
 
 COMPONENTS="$@"
 
