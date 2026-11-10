@@ -87,6 +87,14 @@ EOF
     assert_success
     assert_output --partial "2048"
     assert_output --partial "Failed to find a valid RSA key size"
+
+    # Cached value is returned immediately without invoking pcr-oracle
+    __fde_rsa_key_size="4096"
+    : > "$MOCK_LOG"
+    run tpm_get_rsa_key_size
+    assert_success
+    assert_output "4096"
+    assert_mock_not_called "pcr-oracle"
 }
 
 @test "UT-T03: tpm_get_ecc_srk_support handles unrecognized option, explicit yes/no, and auto probe" {

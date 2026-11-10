@@ -67,6 +67,7 @@ teardown() {
 @test "CLI-07: fdectl --bootloader systemd-boot tpm-enable reports not yet implemented" {
     echo 'FDE_DEVS="/dev/sda"' >> "$FDE_SYSCONFIG"
     run bash "$REPO/fde.sh" --bootloader systemd-boot tpm-enable
+    assert_failure 1
     assert_output --partial "systemd-boot support not yet implemented"
 }
 
@@ -96,6 +97,7 @@ teardown() {
     echo 'FDE_DEVS="/dev/sda"' >> "$FDE_SYSCONFIG"
     # In passwd command with empty input, display_errorbox calls dialog --msgbox
     run bash "$REPO/fde.sh" --use-dialog passwd </dev/null
+    assert_failure 1
     assert_mock_called "dialog .*--msgbox"
 }
 
@@ -112,7 +114,11 @@ teardown() {
     echo "password" > "$TEST_ROOT/pass.key"
     echo 0 > "$MOCK_DIR/cryptsetup.rc"
 
-    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/pass.key" passwd </dev/null
+    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/pass.key" passwd << 'EOF'
+newpass
+newpass
+EOF
+    assert_success
     assert_mock_called "cryptsetup open --test-passphrase.* /dev/sda"
     assert_mock_called "cryptsetup open --test-passphrase.* /dev/sdb"
 
@@ -132,7 +138,11 @@ teardown() {
     echo "dummy-pass" > "$TEST_ROOT/pass.key"
     echo 0 > "$MOCK_DIR/cryptsetup.rc"
 
-    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/pass.key" passwd </dev/null
+    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/pass.key" passwd << 'EOF'
+newpass
+newpass
+EOF
+    assert_success
     assert_mock_called "df --output=source /"
     assert_mock_called "cryptsetup open --test-passphrase.* /dev/sda2"
 }
@@ -147,7 +157,11 @@ teardown() {
     echo "dummy-pass" > "$TEST_ROOT/pass.key"
     echo 0 > "$MOCK_DIR/cryptsetup.rc"
 
-    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/pass.key" passwd </dev/null
+    run bash "$REPO/fde.sh" --passfile "$TEST_ROOT/pass.key" passwd << 'EOF'
+newpass
+newpass
+EOF
+    assert_success
     assert_mock_called "cryptsetup open --test-passphrase.* /dev/sda2"
     assert_mock_called "cryptsetup open --test-passphrase.* /dev/sdb1"
 }

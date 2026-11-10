@@ -653,6 +653,7 @@ EOF
     echo 0 > "$MOCK_DIR/pcr-oracle.rc"
     cat << 'EOF' > "$MOCK_DIR/pcr-oracle.sh"
 #!/bin/bash
+args=("$@")
 out=""
 action=""
 while [ $# -gt 0 ]; do
@@ -666,7 +667,7 @@ if [ "$action" = "unseal-secret" ] && [ -n "$out" ]; then
     echo "corrupted-recovered-key" > "$out"
     exit 0
 fi
-exec "$MOCK_DIR/pcr-oracle.default.sh" "$@"
+exec "$MOCK_DIR/pcr-oracle.default.sh" "${args[@]}"
 EOF
     chmod +x "$MOCK_DIR/pcr-oracle.sh"
 

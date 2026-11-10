@@ -73,9 +73,9 @@ check-unit:
 check-luks: all
 	$(BATS) -r test/luks
 
-check-c: fde-boot-loader
+check-c:
 	@if command -v gcc >/dev/null 2>&1 || command -v clang >/dev/null 2>&1; then \
-		$(MAKE) -C test/c check; \
+		$(MAKE) fde-boot-loader && $(MAKE) -C test/c check; \
 	else \
 		echo "check-c: compiler not found, skipping C unit tests"; \
 	fi

@@ -1,3 +1,7 @@
 test_boot_loader
 fuzz_boot_loader
+fuzz-artifacts/
+crash-*
+leak-*
+timeout-*
 *.o

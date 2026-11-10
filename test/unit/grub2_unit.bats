@@ -148,10 +148,15 @@ teardown() {
     assert_failure 1
 
     # tpm2key-tool missing fallback -> rc 0
-    rm -f "$MOCK_BIN_DIR/tpm2key-tool"
+    type() {
+        if [ "$1" = "tpm2key-tool" ]; then
+            return 1
+        fi
+        builtin type "$@"
+    }
     run grub_check_sealed_key
     assert_success
-    ln -sf "$REPO/test/mocks/bin/stub" "$MOCK_BIN_DIR/tpm2key-tool"
+    unset -f type
 }
 
 @test "UT-G07: grub_remove_keyslots removes explicit or detected slots and cleans" {
