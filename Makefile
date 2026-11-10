@@ -56,7 +56,7 @@ all:: $(TOOLS) $(SUBDIRS) $(TOKEN_PLUGINS)
 BATS            ?= bats
 SHELLCHECK      ?= shellcheck
 
-check: check-static check-unit check-c
+check: check-static check-unit check-luks check-c
 
 SHELL_SOURCES	= fde.sh $(_LIBSCRIPTS) firstboot/fde rpm-build/$(TPM_HELPER)
 
