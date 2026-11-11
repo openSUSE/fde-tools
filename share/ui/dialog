@@ -67,7 +67,7 @@ fi
 function display_errorbox {
 
     logger -t fde-tools -p local0.err "$*"
-    d --title ERROR --msgbox "$*" 8 60
+    d --cr-wrap --title ERROR --msgbox "$*" 0 0
 }
 
 function display_infobox {

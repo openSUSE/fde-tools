@@ -95,10 +95,10 @@ teardown() {
 
 @test "CLI-11: fdectl --use-dialog selects dialog UI" {
     echo 'FDE_DEVS="/dev/sda"' >> "$FDE_SYSCONFIG"
-    # In passwd command with empty input, display_errorbox calls dialog --msgbox
+    # In passwd command with empty input, display_errorbox calls dialog --msgbox with --cr-wrap and auto-sizing (0 0)
     run bash "$REPO/fde.sh" --use-dialog passwd </dev/null
     assert_failure 1
-    assert_mock_called "dialog .*--msgbox"
+    assert_mock_called "dialog .*--cr-wrap .*--title ERROR --msgbox .* 0 0"
 }
 
 @test "CLI-12: fdectl fails early if FDE_LUKS_PBKDF is invalid in sysconfig" {
