@@ -131,6 +131,7 @@ setup_fde_env() {
     export FDE_BOOT_WRITABLE="$TEST_ROOT/boot/writable"
     export FDE_INITRD="$TEST_ROOT/boot/initrd"
     export FDE_LUKS_HEADER="$TEST_ROOT/root/.luks.header"
+    export FDE_DECRYPT_HEADER="$TEST_ROOT/luks-decrypt-header.backup"
     export FDE_TMP_PARENT="$TEST_ROOT/dev/shm"
     export FDE_SYSFS="$TEST_ROOT/sys"
     export FDE_PROCFS="$TEST_ROOT/proc"
@@ -202,12 +203,24 @@ EOF
     mkdir -p "$MOCK_BIN_DIR"
     local mock_commands=(
         cryptsetup pcr-oracle fdectl-grub-tpm2 shim-install grub2-protect
-        tpm2key-tool fde-boot-loader mokutil lsblk df dialog logger chroot
+        tpm2key-tool fde-boot-loader mokutil lsblk df findmnt dialog logger chroot
         fdectl systemctl dracut grub2-mkconfig lsinitrd transactional-update
     )
     for cmd in "${mock_commands[@]}"; do
         ln -sf "$REPO/test/mocks/bin/stub" "$MOCK_BIN_DIR/$cmd"
     done
+
+    cat << 'EOF' > "$MOCK_BIN_DIR/mountpoint"
+#!/bin/bash
+if [ -f "$MOCK_DIR/mountpoint.rc" ]; then
+    exit "$(cat "$MOCK_DIR/mountpoint.rc")"
+fi
+if [ -x /usr/bin/mountpoint ]; then
+    exec /usr/bin/mountpoint "$@"
+fi
+exit 1
+EOF
+    chmod +x "$MOCK_BIN_DIR/mountpoint"
 
     export PATH="$MOCK_BIN_DIR:$PATH"
 }

@@ -97,3 +97,173 @@ teardown() {
     assert_success
     assert_output "7"
 }
+
+@test "UT-L06: luks_decrypt refuses to start if existing header file is present" {
+    local hdr="$TEST_ROOT/luks-decrypt-header.backup"
+    echo "existing_header_from_interrupted_run" > "$hdr"
+    export FDE_DECRYPT_HEADER="$hdr"
+
+    run luks_decrypt "/dev/sda2" "$TEST_ROOT/test.key"
+    assert_failure 1
+    assert_output --partial "A detached LUKS header already exists at"
+    assert_output --partial "cryptsetup reencrypt --resume-only --header \"$hdr\" /dev/sda2"
+
+    # Header file must not be deleted
+    [ -f "$hdr" ] || fail "existing header file was unexpectedly deleted"
+    assert_equal "$(cat "$hdr")" "existing_header_from_interrupted_run"
+    assert_mock_not_called "cryptsetup"
+}
+
+@test "UT-L07: luks_decrypt refuses to start if ESP is not a separate mounted filesystem" {
+    unset FDE_DECRYPT_HEADER
+    local unmounted_esp="$TEST_ROOT/unmounted_esp"
+    mkdir -p "$unmounted_esp"
+    export FDE_ESP_DIR="$unmounted_esp"
+
+    run luks_decrypt "/dev/sda2" "$TEST_ROOT/test.key"
+    assert_failure 1
+    assert_output --partial "is not mounted as a separate filesystem"
+    assert_output --partial "FDE_DECRYPT_HEADER"
+    assert_mock_not_called "cryptsetup"
+}
+
+@test "UT-L08: luks_decrypt preserves header file and shows resume instructions on failure" {
+    local hdr="$TEST_ROOT/luks-decrypt-header.backup"
+    rm -f "$hdr"
+    export FDE_DECRYPT_HEADER="$hdr"
+
+    # Mock cryptsetup to simulate failure after creating header backup
+    cat << 'EOF' > "$MOCK_DIR/cryptsetup.sh"
+#!/bin/bash
+header=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --header) header="$2"; shift 2;;
+    *) shift;;
+    esac
+done
+if [ -n "$header" ]; then
+    echo "simulated_header_backup" > "$header"
+fi
+exit 1
+EOF
+    chmod +x "$MOCK_DIR/cryptsetup.sh"
+
+    run luks_decrypt "/dev/sda2" "$TEST_ROOT/test.key"
+    assert_failure 1
+    assert_output --partial "Warning: cryptsetup reencrypt --decrypt indicates failure"
+    assert_output --partial "The LUKS header is preserved at:"
+    assert_output --partial "cryptsetup reencrypt --resume-only --header \"$hdr\" /dev/sda2"
+
+    # Header must be preserved
+    [ -f "$hdr" ] || fail "header file was not preserved on failure"
+    assert_equal "$(cat "$hdr")" "simulated_header_backup"
+}
+
+@test "UT-L09: luks_decrypt removes header file upon successful completion" {
+    local hdr="$TEST_ROOT/luks-decrypt-header.backup"
+    rm -f "$hdr"
+    export FDE_DECRYPT_HEADER="$hdr"
+
+    # Mock cryptsetup to simulate successful decryption
+    cat << 'EOF' > "$MOCK_DIR/cryptsetup.sh"
+#!/bin/bash
+header=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --header) header="$2"; shift 2;;
+    *) shift;;
+    esac
+done
+if [ -n "$header" ]; then
+    echo "simulated_header_backup" > "$header"
+fi
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/cryptsetup.sh"
+
+    run luks_decrypt "/dev/sda2" "$TEST_ROOT/test.key"
+    assert_success
+
+    # Header must be cleanly removed on success
+    [ ! -f "$hdr" ] || fail "header file was not cleaned up on success"
+}
+
+@test "UT-L10: luks_decrypt accepts mounted separate ESP and places header there" {
+    unset FDE_DECRYPT_HEADER
+    local esp="$TEST_ROOT/boot/efi"
+    mkdir -p "$esp"
+    export FDE_ESP_DIR="$esp"
+
+    # Simulate mounted ESP on separate partition /dev/sda1, distinct from root
+    echo 0 > "$MOCK_DIR/mountpoint.rc"
+    cat << 'EOF' > "$MOCK_DIR/df.sh"
+#!/bin/bash
+target="${@: -1}"
+if [ "$target" = "/" ]; then
+    echo "/dev/mapper/cr_root"
+else
+    echo "/dev/sda1"
+fi
+EOF
+    chmod +x "$MOCK_DIR/df.sh"
+
+    cat << 'EOF' > "$MOCK_DIR/findmnt.sh"
+#!/bin/bash
+target=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --target) target="$2"; shift 2;;
+    *) target="$1"; shift;;
+    esac
+done
+if [ "$target" = "/" ]; then
+    echo "/dev/mapper/cr_root"
+else
+    echo "/dev/sda1"
+fi
+EOF
+    chmod +x "$MOCK_DIR/findmnt.sh"
+
+    cat << 'EOF' > "$MOCK_DIR/cryptsetup.sh"
+#!/bin/bash
+header=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --header) header="$2"; shift 2;;
+    *) shift;;
+    esac
+done
+if [ -n "$header" ]; then
+    echo "$header" > "$MOCK_DIR/captured_header.txt"
+    touch "$header"
+fi
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/cryptsetup.sh"
+
+    run luks_decrypt "/dev/sda2" "$TEST_ROOT/test.key"
+    assert_success
+
+    # Header was placed under ESP
+    assert_equal "$(cat "$MOCK_DIR/captured_header.txt")" "${esp}/luks-decrypt-header.backup"
+    # And cleaned up on success
+    [ ! -f "${esp}/luks-decrypt-header.backup" ] || fail "header backup was not removed on success"
+}
+
+@test "UT-L10: luks_decrypt refuses if ESP mount source matches LUKS device" {
+    unset FDE_DECRYPT_HEADER
+    local esp="$TEST_ROOT/boot/efi"
+    mkdir -p "$esp"
+    export FDE_ESP_DIR="$esp"
+
+    # Mountpoint succeeds, but df reports same source as luks_dev (/dev/sda2)
+    echo 0 > "$MOCK_DIR/mountpoint.rc"
+    echo "/dev/sda2" > "$MOCK_DIR/df.out"
+    echo "/dev/sda2" > "$MOCK_DIR/findmnt.out"
+
+    run luks_decrypt "/dev/sda2" "$TEST_ROOT/test.key"
+    assert_failure 1
+    assert_output --partial "is not mounted as a separate filesystem"
+    assert_mock_not_called "cryptsetup"
+}

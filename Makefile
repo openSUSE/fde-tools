@@ -80,9 +80,12 @@ check-c:
 		echo "check-c: compiler not found, skipping C unit tests"; \
 	fi
 
-# Placeholders until the matching test suites are added
-check-root:
-	@echo "$@: no tests yet"
+check-root: all
+	@if [ "$$(id -u)" -eq 0 ]; then \
+		$(BATS) -r test/root; \
+	else \
+		echo "check-root: requires root privileges (id -u == 0), skipping"; \
+	fi
 
 install:: $(TOOLS)
 	install -d $(DESTDIR)$(SBINDIR)
