@@ -18,33 +18,33 @@
 #
 #   Written by Gary Lin <glin@suse.com>
 
-: "${CRYPTTAB:=/etc/crypttab}"
+: "${FDE_CRYPTTAB:=/etc/crypttab}"
 : "${FDE_SYSCONFIG:=/etc/sysconfig/fde-tools}"
-: "${GRUB2_DEFAULT:=/etc/default/grub}"
-: "${FDECTL:=/usr/sbin/fdectl}"
+: "${FDE_GRUB_DEFAULTS:=/etc/default/grub}"
+: "${FDE_FDECTL:=/usr/sbin/fdectl}"
 
 COMPONENTS="$@"
 
 # Exit if crypttab doesn't exist
-if [ ! -f ${CRYPTTAB} ]; then
+if [ ! -f "${FDE_CRYPTTAB}" ]; then
     exit
 fi
 
 # Exit if fde-tools is not installed
-if [ ! -f ${FDE_SYSCONFIG} -o ! -x ${FDECTL} ]; then
+if [ ! -f "${FDE_SYSCONFIG}" ] || [ ! -x "${FDE_FDECTL}" ]; then
     exit
 fi
 
 # Check if the system enables TPM auto-unlock
-if [ -f ${GRUB2_DEFAULT} ]; then
-    source ${GRUB2_DEFAULT}
+if [ -f "${FDE_GRUB_DEFAULTS}" ]; then
+    source "${FDE_GRUB_DEFAULTS}"
     # Exit if there is no sealed key for grub2
     if [ -z "${GRUB_TPM2_SEALED_KEY}" ]; then
 	exit
     fi
 fi
 
-source ${FDE_SYSCONFIG}
+source "${FDE_SYSCONFIG}"
 
 # Exit if authorized policy is not enabled
 if ! [[ "$FDE_USE_AUTHORIZED_POLICIES" =~ y.* ]]; then
@@ -67,4 +67,4 @@ fi
 
 # Update the signature in the sealed key
 echo "Update the signature due to changes in \"${COMPONENTS}\""
-${FDECTL} tpm-authorize
+"${FDE_FDECTL}" tpm-authorize
