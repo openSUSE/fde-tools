@@ -60,15 +60,17 @@ cryptsetup_token_dump(struct crypt_device *cd, const char *json)
 {
 	json_object *jobj_token;
 	json_object *jobj_timestamp;
+	const char *ts = NULL;
 	char buf[80];
 
 	jobj_token = json_tokener_parse(json);
 	if (!jobj_token)
 		return;
 
-	json_object_object_get_ex(jobj_token, "timestamp", &jobj_timestamp);
-	if (snprintf(buf, sizeof(buf) - 1, "\ttimestamp:  %s\n",
-	    json_object_get_string(jobj_timestamp)) > 0)
+	if (json_object_object_get_ex(jobj_token, "timestamp", &jobj_timestamp))
+		ts = json_object_get_string(jobj_timestamp);
+
+	if (ts && snprintf(buf, sizeof(buf) - 1, "\ttimestamp:  %s\n", ts) > 0)
 		crypt_log(cd, CRYPT_LOG_NORMAL, buf);
 
 	json_object_put(jobj_token);
