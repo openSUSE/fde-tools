@@ -130,7 +130,7 @@ teardown() {
     assert_output --partial "0 1"
 }
 
-@test "C-T06: libcryptsetup-token-grub-tpm2 token import, dump, and validation" {
+@test "C-T06: libcryptsetup-token-grub-tpm2 plugin import and dump handler" {
     require_token_plugin
 
     local img="$TEST_ROOT/luks.img"
@@ -145,11 +145,16 @@ teardown() {
     assert_success
     assert_output --partial "timestamp:  2026-11-10T12:00:00Z"
 
-    # 3. Invalid JSON is rejected
+    # 3. Dump token without timestamp succeeds without printing timestamp
+    run bash -c "echo '{\"type\":\"grub-tpm2\",\"keyslots\":[\"0\"]}' | cryptsetup token import --external-tokens-path '$REPO' '$img'"
+    assert_success
+    run cryptsetup luksDump --external-tokens-path "$REPO" "$img"
+    assert_success
+
+    # 4. Cryptsetup token schema checks (rejected with or without external plugin)
     run bash -c "echo 'not a valid json' | cryptsetup token import --external-tokens-path '$REPO' '$img'"
     assert_failure
 
-    # 4. JSON with missing type or non-array keyslots is rejected
     run bash -c "echo '{\"keyslots\":[\"0\"]}' | cryptsetup token import --external-tokens-path '$REPO' '$img'"
     assert_failure
 
