@@ -519,7 +519,7 @@ function luks_reencrypt {
     # we need to perform reencryption during installation, after dd'ing the image to
     # disk and prior to mounting it.
     {
-	LC_ALL=C cryptsetup reencrypt --key-file "$luks_keyfile" --progress-frequency 1 $luks_dev 2>&1|
+	LC_ALL=C cryptsetup -q reencrypt --key-file "$luks_keyfile" --progress-frequency 1 $luks_dev </dev/null 2>&1 |
 	    sed -u 's/.* \([0-9]*\)[0-9.]*%.*/\1/'
 	    echo 100
     } | display_gauge "Re-encrypting root file system on $luks_dev"
@@ -530,6 +530,7 @@ function luks_decrypt {
     luks_dev="$1"
     luks_keyfile="$2"
     local status_file
+    local header_file
     local status
 
     # The exit status of cryptsetup is swallowed by the pipeline feeding the
@@ -537,11 +538,70 @@ function luks_decrypt {
     # /etc/crypttab, which must not happen when the device is still encrypted.
     status_file=$(fde_make_tempfile decrypt.status)
 
+    # In-place LUKS2 decryption shifts data to sector 0 and requires a detached
+    # header file to evacuate metadata and keyslots during the operation.
+    # The header must reside on persistent storage outside the volume being decrypted
+    # (e.g. the mounted ESP) to allow resumption after an interruption.
+    if [ -n "$FDE_DECRYPT_HEADER" ]; then
+        header_file="$FDE_DECRYPT_HEADER"
+    else
+        local esp_dir="${FDE_ESP_DIR:-/boot/efi}"
+        local is_separate_fs=false
+        if [ -d "$esp_dir" ]; then
+            if mountpoint -q "$esp_dir" 2>/dev/null; then
+                is_separate_fs=true
+            elif [ -e "$esp_dir" ] && [ -e "$(dirname "$esp_dir")" ]; then
+                local esp_dev parent_dev
+                esp_dev=$(stat -c %d "$esp_dir" 2>/dev/null)
+                parent_dev=$(stat -c %d "$(dirname "$esp_dir")" 2>/dev/null)
+                if [ -n "$esp_dev" ] && [ "$esp_dev" != "$parent_dev" ]; then
+                    is_separate_fs=true
+                fi
+            fi
+            if $is_separate_fs; then
+                local esp_src="" root_src=""
+                if command -v findmnt >/dev/null 2>&1; then
+                    esp_src=$(findmnt -n -o SOURCE --target "$esp_dir" 2>/dev/null)
+                    root_src=$(findmnt -n -o SOURCE --target "/" 2>/dev/null)
+                else
+                    esp_src=$(df -P "$esp_dir" 2>/dev/null | tail -n 1 | awk '{print $1}')
+                    root_src=$(df -P "/" 2>/dev/null | tail -n 1 | awk '{print $1}')
+                fi
+                if [ -n "$esp_src" ] && { [ "$esp_src" = "$luks_dev" ] || [ "$esp_src" = "$root_src" ]; }; then
+                    is_separate_fs=false
+                fi
+            fi
+        fi
+        if $is_separate_fs; then
+            header_file="${esp_dir}/luks-decrypt-header.backup"
+        else
+            fde_trace "Cannot safely decrypt: ESP ($esp_dir) is not a separate mounted filesystem"
+            display_errorbox "Cannot safely decrypt $luks_dev:
+The EFI System Partition ($esp_dir) is not mounted as a separate filesystem.
+Please provide an external header path via FDE_DECRYPT_HEADER."
+            return 1
+        fi
+    fi
+
+    # If the detached header file already exists, an earlier decryption attempt
+    # was interrupted. Never delete it, as it may be the sole copy of the LUKS2 header.
+    if [ -f "$header_file" ]; then
+        fde_trace "Existing detached header found at $header_file; earlier decryption may be incomplete."
+        fde_trace "To resume decryption, run: cryptsetup reencrypt --resume-only --header \"$header_file\" $luks_dev"
+        display_errorbox "A detached LUKS header already exists at:
+$header_file
+
+An earlier decryption attempt may be incomplete. Refusing to overwrite.
+To resume decryption, run:
+cryptsetup reencrypt --resume-only --header \"$header_file\" $luks_dev"
+        return 1
+    fi
+
     # Online reencryption works with LUKS2 only. If we ever want to do FDE with luks1,
     # we need to perform reencryption during installation, after dd'ing the image to
     # disk and prior to mounting it.
     {
-	{ LC_ALL=C cryptsetup reencrypt --decrypt --key-file "$luks_keyfile" --progress-frequency 1 $luks_dev 2>&1
+	{ LC_ALL=C cryptsetup -q reencrypt --decrypt --header "$header_file" --key-file "$luks_keyfile" --progress-frequency 1 $luks_dev </dev/null 2>&1
 	  echo $? >"$status_file"; } |
 	    sed -u 's/.* \([0-9]*\)[0-9.]*%.*/\1/'
 	    echo 100
@@ -552,9 +612,19 @@ function luks_decrypt {
 
     if [ "$status" != "0" ]; then
 	fde_trace "Warning: cryptsetup reencrypt --decrypt indicates failure"
+	if [ -f "$header_file" ]; then
+	    fde_trace "LUKS header preserved at $header_file"
+	    fde_trace "To resume decryption, run: cryptsetup reencrypt --resume-only --header \"$header_file\" $luks_dev"
+	    display_errorbox "Decryption failed. The LUKS header is preserved at:
+$header_file
+
+To resume decryption, run:
+cryptsetup reencrypt --resume-only --header \"$header_file\" $luks_dev"
+	fi
 	return 1
     fi
 
+    rm -f "$header_file"
     return 0
 }
 
