@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, test-cases ]
+  pull_request:
+    branches: [ main, test-cases ]
+
+jobs:
+  build-and-test:
+    name: Test on ${{ matrix.os-name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os-name: "openSUSE Tumbleweed"
+            container-image: "registry.opensuse.org/opensuse/tumbleweed:latest"
+
+    container:
+      image: ${{ matrix.container-image }}
+      options: --privileged
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install dependencies
+      run: |
+        zypper --non-interactive ref
+        zypper --non-interactive in --no-recommends \
+          gcc make help2man git-core gawk util-linux \
+          diffutils findutils \
+          device-mapper \
+          bats ShellCheck cryptsetup \
+          libcryptsetup-devel json-c-devel \
+          libfido2-devel libopenssl-devel \
+          libasan8 libubsan1 \
+          efivar-devel
+
+    - name: Build all targets
+      run: |
+        make all
+
+    - name: Run checks (static, unit, luks, c)
+      run: |
+        make check
+
+    - name: Run root tests
+      run: |
+        dmsetup mknodes || true
+        test -e /dev/mapper/control || { echo "ERROR: /dev/mapper/control missing; cannot run root tests"; exit 1; }
+        make check-root
