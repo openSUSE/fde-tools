@@ -336,3 +336,24 @@ teardown() {
     # Must not have reached fdectl regenerate-key
     assert_mock_not_called "fdectl"
 }
+
+@test "FB-13: fde_setup_encrypted aborts if luks_reencrypt fails" {
+    . "$REPO/firstboot/fde"
+
+    luks_get_underlying_device() { echo "/dev/sda2"; }
+    tpm_test() { return 0; }
+    luks_verify_password() { return 0; }
+    luks_change_password() { result_password="new_recovery_pass"; return 0; }
+    luks_drop_other_keyslots() { return 0; }
+    luks_reencrypt() { return 1; }
+
+    FDE_PROTECTION="pass tpm"
+    : > "$MOCK_LOG"
+
+    run fde_setup_encrypted "/dev/mapper/cr_root" "" "builtin_pass"
+    assert_failure 1
+    assert_output --partial "Failed to re-encrypt /dev/sda2"
+
+    assert_mock_not_called "fdectl"
+    assert_mock_not_called "systemctl"
+}

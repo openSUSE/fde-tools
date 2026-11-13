@@ -267,3 +267,38 @@ EOF
     assert_output --partial "is not mounted as a separate filesystem"
     assert_mock_not_called "cryptsetup"
 }
+
+@test "UT-L11: luks_reencrypt propagates cryptsetup failure exit code" {
+    cat << 'EOF' > "$MOCK_DIR/cryptsetup.sh"
+#!/bin/bash
+exit 1
+EOF
+    chmod +x "$MOCK_DIR/cryptsetup.sh"
+
+    local key="$TEST_ROOT/test.key"
+    touch "$key"
+
+    run luks_reencrypt "/dev/sda2" "$key"
+    assert_failure 1
+    assert_output --partial "Warning: cryptsetup reencrypt indicates failure"
+}
+
+@test "UT-L11: luks_reencrypt returns 0 on success and feeds progress to gauge" {
+    cat << 'EOF' > "$MOCK_DIR/cryptsetup.sh"
+#!/bin/bash
+echo "Progress: 50%"
+exit 0
+EOF
+    chmod +x "$MOCK_DIR/cryptsetup.sh"
+
+    local key="$TEST_ROOT/test.key"
+    touch "$key"
+
+    local gauge_log="$TEST_ROOT/gauge.log"
+    display_gauge() { cat > "$gauge_log"; }
+
+    run luks_reencrypt "/dev/sda2" "$key"
+    assert_success
+    [ -f "$gauge_log" ]
+    assert_equal "$(tail -n1 "$gauge_log")" "100"
+}

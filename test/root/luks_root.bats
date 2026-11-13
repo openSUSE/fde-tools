@@ -58,6 +58,12 @@ teardown() {
     local gauge_log="$TEST_ROOT/gauge.log"
     display_gauge() { cat > "$gauge_log"; }
 
+    # An invalid keyfile fails and returns non-zero status
+    local wrong_key="$TEST_ROOT/wrong.key"
+    echo "wrong_key_data" > "$wrong_key"
+    run luks_reencrypt "$loop_dev" "$wrong_key"
+    assert_failure 1
+
     run luks_reencrypt "$loop_dev" "$key"
     assert_success
 

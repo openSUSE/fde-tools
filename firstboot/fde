@@ -233,7 +233,10 @@ function fde_setup_encrypted {
     # FIXME: only do this if the LUKS master key is well-known, eg when dealing with
     # a VM image.
     if [ "$is_reencrypted" = "false" ]; then
-        luks_reencrypt "${luks_dev}" "${pass_keyfile}"
+        if ! luks_reencrypt "${luks_dev}" "${pass_keyfile}"; then
+            display_errorbox "Failed to re-encrypt ${luks_dev}"
+            return 1
+        fi
     fi
 
     if $with_tpm; then

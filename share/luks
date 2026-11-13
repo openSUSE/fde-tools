@@ -514,15 +514,32 @@ function luks_reencrypt {
 
     local luks_dev="$1"
     local luks_keyfile="$2"
+    local status_file
+    local status
+
+    # The exit status of cryptsetup is swallowed by the pipeline feeding the
+    # gauge, so stash it in a file.
+    status_file=$(fde_make_tempfile reencrypt.status)
 
     # Online reencryption works with LUKS2 only. If we ever want to do FDE with luks1,
     # we need to perform reencryption during installation, after dd'ing the image to
     # disk and prior to mounting it.
     {
-	LC_ALL=C cryptsetup -q reencrypt --key-file "$luks_keyfile" --progress-frequency 1 $luks_dev </dev/null 2>&1 |
+	{ LC_ALL=C cryptsetup -q reencrypt --key-file "$luks_keyfile" --progress-frequency 1 "$luks_dev" </dev/null 2>&1
+	  echo $? >"$status_file"; } |
 	    sed -u 's/.* \([0-9]*\)[0-9.]*%.*/\1/'
 	    echo 100
     } | display_gauge "Re-encrypting root file system on $luks_dev"
+
+    status=$(cat "$status_file" 2>/dev/null)
+    rm -f "$status_file"
+
+    if [ "$status" != "0" ]; then
+        fde_trace "Warning: cryptsetup reencrypt indicates failure"
+        return 1
+    fi
+
+    return 0
 }
 
 function luks_decrypt {
