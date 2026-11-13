@@ -141,30 +141,6 @@ function luks_get_underlying_device {
     echo "Unable to find underlying LUKS block device for $luks_name" >&2
 }
 
-function __partlabel_to_dev {
-
-    wanted="$1"
-    lsblk -nPo NAME,PARTLABEL|while read _line; do
-	eval declare -- $_line
-	if [ "${PARTLABEL}" = "${wanted}" -a -n "${NAME}" ]; then
-	    if ! [[ "${NAME}" =~ /dev/.* ]]; then
-		NAME="/dev/${NAME}"
-	    fi
-	    echo "${NAME}"
-	    break
-	fi
-    done
-}
-
-function partlabel_to_dev {
-
-    for iter in 1 2 3; do
-	dev=$(__partlabel_to_dev "$@")
-	test -z "${dev}" || break
-    done
-    echo "${dev}"
-}
-
 ##################################################################
 # Write a passphrase to a file s.th. it can be used as
 # --key-file argument.
