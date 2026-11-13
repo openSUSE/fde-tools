@@ -244,6 +244,7 @@ teardown() {
     assert_success
     assert_output --partial "Failed to protect encrypted volume with TPM"
     assert_mock_not_called "systemctl enable fde-tpm-enroll.service"
+    assert_mock_called "shim-install"
 }
 
 @test "FB-09: fde_setup_encrypted rejects root device that is not a dm device" {

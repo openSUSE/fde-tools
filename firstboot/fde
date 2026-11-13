@@ -246,7 +246,9 @@ function fde_setup_encrypted {
 	else
 	    systemctl enable fde-tpm-enroll.service
 	fi
-    else
+    fi
+
+    if ! $with_tpm && $with_pass; then
 	# Update grub.cfg to attempt a cryptomount and ask the user for the
 	# password
 	if ! fde_protect_notpm "${luks_dev}"; then
