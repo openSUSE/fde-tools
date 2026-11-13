@@ -47,3 +47,4 @@ check-fuzz: $(FUZZ_TARGET)
 
 clean:
 	rm -f $(TARGET) $(FUZZ_TARGET) *.o
+	rm -rf fuzz-artifacts

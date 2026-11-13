@@ -149,11 +149,12 @@ build/%.o: src/%.c
 	@mkdir -p build
 	$(CC) -o $@ $(CFLAGS) -c $<
 
-dist:
+dist: clean
 	mkdir -p $(PKGNAME)
 	cp -a Makefile sysconfig.fde fde.sh src share firstboot cryptsetup rpm-build \
 	      test .shellcheckrc $(SUBDIRS) $(PKGNAME)
 	sed -i "s/__VERSION__/$(PKGVER)/" $(PKGNAME)/fde.sh
-	@find $(PKGNAME) \( -name '.*.swp' -o -name '*.{rej,orig}' \) -exec rm {} \;
+	@find $(PKGNAME) \( -name '.*.swp' -o -name '*.{rej,orig}' -o -name '*.o' \) -exec rm -f {} +
+	@rm -rf $(PKGNAME)/test/c/fuzz-artifacts
 	tar -cvjf $(PKGNAME).tar.bz2 $(PKGNAME)
 	rm -rf $(PKGNAME)
