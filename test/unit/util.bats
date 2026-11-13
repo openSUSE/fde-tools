@@ -220,6 +220,39 @@ _source_value() {
     [ ! -e pwned ] && [ ! -e "$TEST_ROOT/pwned" ]
 }
 
+@test "UT-U07: sysconfig_set_variable: fails and does not set in-memory variable on write error" {
+    # 1. Append path failure: destination directory does not exist (fails for both root and non-root)
+    local bad_cfg="$TEST_ROOT/nonexistent_dir/cfg"
+    unset FAIL_VAR
+    run sysconfig_set_variable "$bad_cfg" "FAIL_VAR" "new_val"
+    assert_failure 1
+    assert_output --partial "sysconfig_set_variable: failed to write FAIL_VAR"
+    [ "${FAIL_VAR-unset}" = "unset" ] || fail "FAIL_VAR was unexpectedly set in memory"
+
+    # For unprivileged users, also verify append failure on DAC read-only file
+    if [ "$(id -u)" -ne 0 ]; then
+        local ro_cfg="$TEST_ROOT/readonly_config"
+        touch "$ro_cfg"
+        chmod 0444 "$ro_cfg"
+        unset RO_VAR
+        run sysconfig_set_variable "$ro_cfg" "RO_VAR" "val"
+        assert_failure 1
+        assert_output --partial "sysconfig_set_variable: failed to write RO_VAR"
+        [ "${RO_VAR-unset}" = "unset" ] || fail "RO_VAR was unexpectedly set in memory"
+    fi
+
+    # 2. Update path failure: sed fails to update file
+    local cfg="$TEST_ROOT/test_cfg"
+    echo 'EXISTING_VAR="old"' > "$cfg"
+    sed() { return 1; }
+
+    unset EXISTING_VAR
+    run sysconfig_set_variable "$cfg" "EXISTING_VAR" "new_val"
+    assert_failure 1
+    assert_output --partial "sysconfig_set_variable: failed to update EXISTING_VAR"
+    [ "${EXISTING_VAR-unset}" = "unset" ] || fail "EXISTING_VAR was unexpectedly set in memory"
+}
+
 @test "UT-U08: fde_random_password format matches 4 hex blocks separated by dashes" {
     run fde_random_password
     assert_success

@@ -147,9 +147,15 @@ function sysconfig_set_variable {
     sed_value=$(printf '%s' "$shell_value" | sed -e 's/[\\&|]/\\&/g')
 
     if ! grep -qs "^[# ]*${var_name}=" "$cfg_file"; then
-	printf '%s="%s"\n' "$var_name" "$shell_value" >> "$cfg_file"
+	if ! printf '%s="%s"\n' "$var_name" "$shell_value" >> "$cfg_file"; then
+	    fde_trace "sysconfig_set_variable: failed to write $var_name to $cfg_file"
+	    return 1
+	fi
     else
-	sed -i "s|^[# ]*${var_name}=.*|${var_name}=\"$sed_value\"|" "$cfg_file"
+	if ! sed -i "s|^[# ]*${var_name}=.*|${var_name}=\"$sed_value\"|" "$cfg_file"; then
+	    fde_trace "sysconfig_set_variable: failed to update $var_name in $cfg_file"
+	    return 1
+	fi
     fi
 
     # Make the new value visible to the rest of this fdectl run, but do
