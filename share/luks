@@ -130,7 +130,7 @@ function luks_get_underlying_device {
 
 	slaves=$(ls "${FDE_SYSFS:-/sys}/block/$id/slaves")
 	case "$slaves" in
-	*" "*)
+	*[[:space:]]*)
 	    echo "Ambiguous number of slave devices for LUKS dm device">&2
 	    return 1;;
 	esac
@@ -139,6 +139,7 @@ function luks_get_underlying_device {
     done
 
     echo "Unable to find underlying LUKS block device for $luks_name" >&2
+    return 1
 }
 
 ##################################################################

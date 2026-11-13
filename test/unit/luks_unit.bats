@@ -59,6 +59,27 @@ teardown() {
     assert_output "system-home"
 }
 
+@test "UT-L02: luks_get_underlying_device resolves single slave and rejects ambiguous multi-slave" {
+    mkdir -p "$FDE_SYSFS/block/dm-0/dm"
+    echo "cr_root" > "$FDE_SYSFS/block/dm-0/dm/name"
+    mkdir -p "$FDE_SYSFS/block/dm-0/slaves/sda2"
+
+    run luks_get_underlying_device "cr_root"
+    assert_success
+    assert_output "/dev/sda2"
+
+    # Multi-slave case (e.g. RAID, multipath, or striped PV) must return rc 1
+    mkdir -p "$FDE_SYSFS/block/dm-0/slaves/sdb2"
+    run luks_get_underlying_device "cr_root"
+    assert_failure 1
+    assert_output --partial "Ambiguous number of slave devices"
+
+    # Non-existent DM device must return rc 1
+    run luks_get_underlying_device "nonexistent_dev"
+    assert_failure 1
+    assert_output --partial "Unable to find underlying LUKS block device"
+}
+
 @test "UT-L03: luks_get_volume_for_fsdev parses multi-PV lsblk output" {
     cp "$REPO/test/fixtures/lsblk.lvm-on-luks.txt" "$MOCK_DIR/lsblk.out"
 
