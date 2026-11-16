@@ -260,20 +260,34 @@ function fde_setup_encrypted {
     # Remove the password file
     rm -f ${pass_keyfile}
 
-    # Update initrd and /boot/grub2/grub.cfg
-    if test -d "${FDE_BOOT_WRITABLE}"; then
-	transactional-update initrd grub.cfg
-	transactional-update apply
-    else
-	dracut -f
-	grub2-mkconfig -o "$FDE_GRUB_CFG"
-    fi
-
     if $with_pass || $with_tpm || $with_ccid; then
 	: all is well
     else
 	return 1
     fi
+
+    # Update initrd and /boot/grub2/grub.cfg
+    if test -d "${FDE_BOOT_WRITABLE}"; then
+	if ! transactional-update initrd grub.cfg; then
+	    display_errorbox "Failed to update initrd and grub.cfg via transactional-update"
+	    return 1
+	fi
+	if ! transactional-update apply; then
+	    display_errorbox "Failed to apply transactional update"
+	    return 1
+	fi
+    else
+	if ! dracut -f; then
+	    display_errorbox "Failed to rebuild initrd"
+	    return 1
+	fi
+	if ! grub2-mkconfig -o "$FDE_GRUB_CFG"; then
+	    display_errorbox "Failed to update grub configuration"
+	    return 1
+	fi
+    fi
+
+    return 0
 
 }
 
