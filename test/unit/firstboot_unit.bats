@@ -358,3 +358,61 @@ teardown() {
     assert_mock_not_called "fdectl"
     assert_mock_not_called "systemctl"
 }
+
+@test "FB-14: fde_setup_encrypted aborts if dracut fails" {
+    . "$REPO/firstboot/fde"
+
+    luks_get_underlying_device() { echo "/dev/sda2"; }
+    tpm_test() { return 0; }
+    luks_verify_password() { return 0; }
+    luks_change_password() { result_password="new_recovery_pass"; return 0; }
+    luks_drop_other_keyslots() { return 0; }
+    luks_reencrypt() { return 0; }
+
+    FDE_PROTECTION="pass tpm"
+    echo 1 > "$MOCK_DIR/dracut.rc"
+    : > "$MOCK_LOG"
+
+    run fde_setup_encrypted "/dev/mapper/cr_root" "" "builtin_pass"
+    assert_failure 1
+    assert_output --partial "Failed to rebuild initrd"
+}
+
+@test "FB-14: fde_setup_encrypted aborts if grub2-mkconfig fails" {
+    . "$REPO/firstboot/fde"
+
+    luks_get_underlying_device() { echo "/dev/sda2"; }
+    tpm_test() { return 0; }
+    luks_verify_password() { return 0; }
+    luks_change_password() { result_password="new_recovery_pass"; return 0; }
+    luks_drop_other_keyslots() { return 0; }
+    luks_reencrypt() { return 0; }
+
+    FDE_PROTECTION="pass tpm"
+    echo 1 > "$MOCK_DIR/grub2-mkconfig.rc"
+    : > "$MOCK_LOG"
+
+    run fde_setup_encrypted "/dev/mapper/cr_root" "" "builtin_pass"
+    assert_failure 1
+    assert_output --partial "Failed to update grub configuration"
+}
+
+@test "FB-14: fde_setup_encrypted aborts if transactional-update fails" {
+    . "$REPO/firstboot/fde"
+
+    luks_get_underlying_device() { echo "/dev/sda2"; }
+    tpm_test() { return 0; }
+    luks_verify_password() { return 0; }
+    luks_change_password() { result_password="new_recovery_pass"; return 0; }
+    luks_drop_other_keyslots() { return 0; }
+    luks_reencrypt() { return 0; }
+
+    mkdir -p "$FDE_BOOT_WRITABLE"
+    FDE_PROTECTION="pass tpm"
+    echo 1 > "$MOCK_DIR/transactional-update.rc"
+    : > "$MOCK_LOG"
+
+    run fde_setup_encrypted "/dev/mapper/cr_root" "" "builtin_pass"
+    assert_failure 1
+    assert_output --partial "Failed to update initrd and grub.cfg via transactional-update"
+}
